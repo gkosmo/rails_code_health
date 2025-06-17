@@ -1,6 +1,7 @@
 # Rails Code Health
 
-A Ruby gem that evaluates the code health of Ruby on Rails applications, inspired by CodeScene's research on technical debt and maintainability.
+A Ruby gem that evaluates the code health of Ruby on Rails applications, [inspired by CodeScene's research on technical debt and maintainability](https://arxiv.org/pdf/2203.04374
+).
 
 ## Overview
 
