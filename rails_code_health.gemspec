@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = 'rails_code_health'
-  spec.version       = '0.1.0'
+  spec.version       = '0.2.0'
   spec.authors       = ['George Kosmopoulos']
   spec.email         = ['gkosmo1@hotmail.com']
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-06-19
+
+### Added
+- Comprehensive test suite with RSpec covering all major components
+- Test coverage for Configuration, FileAnalyzer, HealthCalculator, ProjectDetector, RailsAnalyzer, and ReportGenerator
+
+### Changed
+- Enhanced Configuration class with improved validation and error handling
+- Improved FileAnalyzer with better file processing capabilities
+- Updated HealthCalculator with more robust scoring algorithms
+- Enhanced ProjectDetector with better Rails project detection
+- Improved RailsAnalyzer with more comprehensive Rails pattern analysis
+- Enhanced ReportGenerator with better formatting and output options
+
+### Fixed
+- Various bug fixes and improvements based on user feedback
+
 ## [0.1.0] - 2025-06-17
 
 ### Added
@@ -26,5 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reporting**: Detailed console output with health categories and JSON export
 - **CLI**: `rails-health` command with options for format, output file, and custom configuration
 
-[Unreleased]: https://github.com/yourusername/rails_code_health/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yourusername/rails_code_health/releases/tag/v0.1.0
+[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gkosmo/rails_code_health/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/gkosmo/rails_code_health/releases/tag/v0.1.0
