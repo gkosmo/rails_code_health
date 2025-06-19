@@ -107,6 +107,12 @@ module RailsCodeHealth
         penalties.concat(calculate_helper_penalties(rails_data))
       when :migration
         penalties.concat(calculate_migration_penalties(rails_data))
+      when :service
+        penalties.concat(calculate_service_penalties(rails_data))
+      when :interactor
+        penalties.concat(calculate_interactor_penalties(rails_data))
+      when :serializer
+        penalties.concat(calculate_serializer_penalties(rails_data))
       end
       
       penalties
@@ -130,6 +136,11 @@ module RailsCodeHealth
       # Direct model access
       if controller_data[:has_direct_model_access]
         penalties << 1.5 * @weights['rails_conventions']
+      end
+      
+      # Business logic in controller
+      if controller_data[:has_business_logic]
+        penalties << 2.0 * @weights['rails_conventions']
       end
       
       penalties
@@ -206,6 +217,102 @@ module RailsCodeHealth
       
       complexity = migration_data[:complexity_score] || 0
       if complexity > 20
+        penalties << 1.0 * @weights['rails_conventions']
+      end
+      
+      penalties
+    end
+
+    def calculate_service_penalties(service_data)
+      penalties = []
+      
+      # Missing call method - critical for services
+      unless service_data[:has_call_method]
+        penalties << 3.0 * @weights['rails_conventions']
+      end
+      
+      # Too many dependencies
+      dependency_count = service_data[:dependencies]&.count || 0
+      service_thresholds = @thresholds['service_thresholds']['dependency_count']
+      if dependency_count > service_thresholds['yellow']
+        severity = dependency_count > service_thresholds['red'] ? 2.0 : 1.0
+        penalties << severity * @weights['rails_conventions']
+      end
+      
+      # High complexity
+      complexity = service_data[:complexity_score] || 0
+      complexity_thresholds = @thresholds['service_thresholds']['complexity_score']
+      if complexity > complexity_thresholds['yellow']
+        severity = complexity > complexity_thresholds['red'] ? 2.0 : 1.0
+        penalties << severity * @weights['rails_conventions']
+      end
+      
+      # Missing error handling
+      error_handling = service_data[:error_handling] || {}
+      unless error_handling[:has_error_handling]
+        penalties << 1.0 * @weights['rails_conventions']
+      end
+      
+      penalties
+    end
+
+    def calculate_interactor_penalties(interactor_data)
+      penalties = []
+      
+      # Missing call method - critical for interactors
+      unless interactor_data[:has_call_method]
+        penalties << 3.0 * @weights['rails_conventions']
+      end
+      
+      # Complex organizers
+      if interactor_data[:is_organizer]
+        complexity = interactor_data[:complexity_score] || 0
+        if complexity > 20  # Organizers should be simple orchestrators
+          penalties << 2.0 * @weights['rails_conventions']
+        end
+      end
+      
+      # Missing failure handling
+      fail_usage = interactor_data[:fail_usage] || {}
+      if (fail_usage[:context_fail] || 0) == 0 && (fail_usage[:fail_bang] || 0) == 0
+        penalties << 1.5 * @weights['rails_conventions']
+      end
+      
+      # High complexity for regular interactors
+      unless interactor_data[:is_organizer]
+        complexity = interactor_data[:complexity_score] || 0
+        if complexity > 15
+          penalties << 1.5 * @weights['rails_conventions']
+        end
+      end
+      
+      penalties
+    end
+
+    def calculate_serializer_penalties(serializer_data)
+      penalties = []
+      
+      # Too many attributes/associations (fat serializer)
+      attribute_count = serializer_data[:attribute_count] || 0
+      association_count = serializer_data[:association_count] || 0
+      total_fields = attribute_count + association_count
+      
+      if total_fields > 20
+        penalties << 2.0 * @weights['rails_conventions']
+      elsif total_fields > 15
+        penalties << 1.0 * @weights['rails_conventions']
+      end
+      
+      # Too many custom methods (complex logic)
+      custom_method_count = serializer_data[:custom_method_count] || 0
+      if custom_method_count > 10
+        penalties << 1.5 * @weights['rails_conventions']
+      elsif custom_method_count > 5
+        penalties << 0.5 * @weights['rails_conventions']
+      end
+      
+      # Empty serializer (no value)
+      if total_fields == 0 && custom_method_count == 0
         penalties << 1.0 * @weights['rails_conventions']
       end
       
@@ -360,6 +467,24 @@ module RailsCodeHealth
             recommendations << "Reduce model callbacks (#{smell[:count]} found) - consider service objects"
           when :data_changes_in_migration
             recommendations << "Avoid data changes in migrations - use rake tasks instead"
+          when :business_logic_in_controller
+            recommendations << "Extract business logic from controller to service objects"
+          when :missing_call_method
+            recommendations << "Add a call method to follow service/interactor conventions"
+          when :fat_service
+            recommendations << "Break down service into smaller, focused services (complexity: #{smell[:complexity]})"
+          when :missing_error_handling
+            recommendations << "Add proper error handling with rescue blocks"
+          when :complex_organizer
+            recommendations << "Simplify organizer - it should only orchestrate other interactors (complexity: #{smell[:complexity]})"
+          when :missing_failure_handling
+            recommendations << "Add failure handling using context.fail or fail! methods"
+          when :fat_serializer
+            recommendations << "Split serializer - it has #{smell[:field_count]} fields"
+          when :complex_serializer
+            recommendations << "Move complex logic out of serializer (#{smell[:method_count]} custom methods)"
+          when :empty_serializer
+            recommendations << "Add attributes or associations to provide value"
           end
         end
       end

@@ -80,7 +80,10 @@ module RailsCodeHealth
       view_patterns = [
         @project_path + 'app/views/**/*.erb',
         @project_path + 'app/views/**/*.haml',
-        @project_path + 'app/views/**/*.slim'
+        @project_path + 'app/views/**/*.slim',
+        @project_path + 'app/**/views/**/*.erb',
+        @project_path + 'app/**/views/**/*.haml',
+        @project_path + 'app/**/views/**/*.slim'
       ]
 
       files = []

@@ -58,16 +58,108 @@ module RailsCodeHealth
       
       file_types = @results.group_by { |r| r[:file_type] }
       
-      file_types.each do |type, files|
+      # Define the order for file types
+      type_order = [
+        :controller, :model, :view, :helper, :migration,
+        :service, :interactor, :serializer, :form, :decorator,
+        :presenter, :policy, :job, :worker, :mailer, :channel,
+        :lib, :config, :test, :ruby
+      ]
+      
+      # Sort file types by the defined order, with unknown types at the end
+      sorted_types = file_types.keys.sort_by do |type|
+        index = type_order.index(type)
+        index || type_order.length
+      end
+      
+      sorted_types.each do |type, _|
+        files = file_types[type]
         next if files.empty?
         
         avg_score = (files.sum { |f| f[:health_score] || 0 } / files.count.to_f).round(1)
         healthy_count = files.count { |f| f[:health_category] == :healthy }
         
-        breakdown << "  #{type.to_s.capitalize}: #{files.count} files, avg score: #{avg_score}, #{healthy_count} healthy"
+        # Get file type emoji
+        emoji = get_file_type_emoji(type)
+        
+        # Show context breakdown for new file types
+        context_info = ""
+        if [:service, :interactor, :serializer, :form, :decorator, :presenter, :policy, :job, :worker].include?(type)
+          context_info = generate_context_breakdown(files)
+        end
+        
+        breakdown << "  #{emoji} #{type.to_s.capitalize}: #{files.count} files, avg score: #{avg_score}, #{healthy_count} healthy"
+        breakdown << context_info if !context_info.empty?
       end
       
       breakdown.join("\n")
+    end
+
+    def get_file_type_emoji(type)
+      emoji_map = {
+        controller: "🎮",
+        model: "📊",
+        view: "🖼️",
+        helper: "🔧",
+        migration: "📈",
+        service: "⚙️",
+        interactor: "🔄",
+        serializer: "📦",
+        form: "📝",
+        decorator: "🎨",
+        presenter: "🎪",
+        policy: "🛡️",
+        job: "⚡",
+        worker: "👷",
+        mailer: "📧",
+        channel: "📡",
+        lib: "📚",
+        config: "⚙️",
+        test: "🧪",
+        ruby: "💎"
+      }
+      emoji_map[type] || "📄"
+    end
+
+    def generate_context_breakdown(files)
+      # Check if any files have context information
+      files_with_context = files.select { |f| f[:context] && !f[:context].empty? }
+      return "" if files_with_context.empty?
+      
+      breakdown_lines = []
+      
+      # Organization patterns
+      organizations = files_with_context.group_by { |f| f[:context][:organization] }
+      if organizations.keys.any? { |org| org != :traditional }
+        org_breakdown = organizations.map do |org, org_files|
+          next if org == :traditional
+          "#{org.to_s.gsub('_', ' ').capitalize}: #{org_files.count}"
+        end.compact
+        breakdown_lines << "    📁 Organization: #{org_breakdown.join(', ')}" if org_breakdown.any?
+      end
+      
+      # Domains
+      domains = files_with_context.group_by { |f| f[:context][:domain] }.reject { |domain, _| domain.nil? }
+      if domains.any?
+        domain_breakdown = domains.map { |domain, domain_files| "#{domain}: #{domain_files.count}" }
+        breakdown_lines << "    🏢 Domains: #{domain_breakdown.join(', ')}"
+      end
+      
+      # Areas
+      areas = files_with_context.group_by { |f| f[:context][:area] }.reject { |area, _| area.nil? }
+      if areas.any?
+        area_breakdown = areas.map { |area, area_files| "#{area}: #{area_files.count}" }
+        breakdown_lines << "    🏠 Areas: #{area_breakdown.join(', ')}"
+      end
+      
+      # API versions
+      api_versions = files_with_context.group_by { |f| f[:context][:api_version] }.reject { |version, _| version.nil? }
+      if api_versions.any?
+        version_breakdown = api_versions.map { |version, version_files| "#{version}: #{version_files.count}" }
+        breakdown_lines << "    🔢 API Versions: #{version_breakdown.join(', ')}"
+      end
+      
+      breakdown_lines.join("\n")
     end
 
     def generate_detailed_report
@@ -174,7 +266,21 @@ module RailsCodeHealth
                     end
       
       summary << "#{rank}. #{prefix} #{health_emoji} #{result[:relative_path]}"
-      summary << "   Score: #{result[:health_score]}/10.0 | Type: #{result[:file_type]} | Size: #{format_file_size(result[:file_size])}"
+      
+      # Build context string
+      context_parts = ["Type: #{result[:file_type]}", "Size: #{format_file_size(result[:file_size])}"]
+      
+      if result[:context] && !result[:context].empty?
+        context_info = []
+        context_info << "#{result[:context][:domain]}" if result[:context][:domain]
+        context_info << "#{result[:context][:area]}" if result[:context][:area]
+        context_info << "#{result[:context][:api_version]}" if result[:context][:api_version]
+        context_info << "#{result[:context][:organization].to_s.gsub('_', ' ')}" if result[:context][:organization] && result[:context][:organization] != :traditional
+        
+        context_parts << "Context: #{context_info.join(', ')}" if context_info.any?
+      end
+      
+      summary << "   Score: #{result[:health_score]}/10.0 | #{context_parts.join(' | ')}"
       
       # Add key metrics if available
       if result[:ruby_analysis]
@@ -200,11 +306,24 @@ module RailsCodeHealth
         case result[:rails_analysis][:rails_type]
         when :controller
           rails_info << "#{result[:rails_analysis][:action_count]} actions"
+          rails_info << "business logic" if result[:rails_analysis][:has_business_logic]
         when :model
           rails_info << "#{result[:rails_analysis][:association_count]} associations" if result[:rails_analysis][:association_count]
           rails_info << "#{result[:rails_analysis][:validation_count]} validations" if result[:rails_analysis][:validation_count]
         when :view
           rails_info << "#{result[:rails_analysis][:logic_lines]} logic lines" if result[:rails_analysis][:logic_lines]
+        when :service
+          rails_info << "call method" if result[:rails_analysis][:has_call_method]
+          rails_info << "deps: #{result[:rails_analysis][:dependencies].join(', ')}" if result[:rails_analysis][:dependencies]&.any?
+          rails_info << "complexity: #{result[:rails_analysis][:complexity_score]}" if result[:rails_analysis][:complexity_score]
+        when :interactor
+          rails_info << "call method" if result[:rails_analysis][:has_call_method]
+          rails_info << "organizer" if result[:rails_analysis][:is_organizer]
+          rails_info << "complexity: #{result[:rails_analysis][:complexity_score]}" if result[:rails_analysis][:complexity_score]
+        when :serializer
+          rails_info << "#{result[:rails_analysis][:attribute_count]} attributes" if result[:rails_analysis][:attribute_count]
+          rails_info << "#{result[:rails_analysis][:association_count]} associations" if result[:rails_analysis][:association_count]
+          rails_info << "#{result[:rails_analysis][:custom_method_count]} custom methods" if result[:rails_analysis][:custom_method_count]
         end
         
         summary << "   Rails: #{rails_info.join(', ')}" if rails_info.any?
@@ -296,6 +415,7 @@ module RailsCodeHealth
         when :controller
           metrics[:controller_actions] = rails_metrics[:action_count]
           metrics[:uses_strong_parameters] = rails_metrics[:uses_strong_parameters]
+          metrics[:has_business_logic] = rails_metrics[:has_business_logic]
         when :model
           metrics[:associations] = rails_metrics[:association_count]
           metrics[:validations] = rails_metrics[:validation_count]
@@ -303,6 +423,21 @@ module RailsCodeHealth
         when :view
           metrics[:view_logic_lines] = rails_metrics[:logic_lines]
           metrics[:has_inline_styles] = rails_metrics[:has_inline_styles]
+        when :service
+          metrics[:has_call_method] = rails_metrics[:has_call_method]
+          metrics[:dependencies] = rails_metrics[:dependencies]
+          metrics[:complexity_score] = rails_metrics[:complexity_score]
+          metrics[:error_handling] = rails_metrics[:error_handling]
+        when :interactor
+          metrics[:has_call_method] = rails_metrics[:has_call_method]
+          metrics[:is_organizer] = rails_metrics[:is_organizer]
+          metrics[:context_usage] = rails_metrics[:context_usage]
+          metrics[:complexity_score] = rails_metrics[:complexity_score]
+        when :serializer
+          metrics[:attribute_count] = rails_metrics[:attribute_count]
+          metrics[:association_count] = rails_metrics[:association_count]
+          metrics[:custom_method_count] = rails_metrics[:custom_method_count]
+          metrics[:has_conditional_attributes] = rails_metrics[:has_conditional_attributes]
         end
       end
       

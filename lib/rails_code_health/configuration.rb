@@ -64,6 +64,10 @@ module RailsCodeHealth
           'view_length' => { 'green' => 30, 'yellow' => 50, 'red' => 100 },
           'migration_complexity' => { 'green' => 10, 'yellow' => 20, 'red' => 40 }
         },
+        'service_thresholds' => {
+          'dependency_count' => { 'green' => 3, 'yellow' => 5, 'red' => 8 },
+          'complexity_score' => { 'green' => 10, 'yellow' => 15, 'red' => 25 }
+        },
         'file_type_multipliers' => {
           'controllers' => 1.2,
           'models' => 1.0,
@@ -71,7 +75,16 @@ module RailsCodeHealth
           'helpers' => 0.9,
           'lib' => 1.1,
           'specs' => 0.7,
-          'migrations' => 0.6
+          'migrations' => 0.6,
+          'service' => 1.3,
+          'interactor' => 1.2,
+          'serializer' => 0.9,
+          'form' => 1.1,
+          'decorator' => 0.9,
+          'presenter' => 0.9,
+          'policy' => 1.2,
+          'job' => 1.0,
+          'worker' => 1.0
         },
         'scoring_weights' => {
           'method_length' => 0.15,
