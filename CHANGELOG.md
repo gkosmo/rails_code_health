@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-12
+
+### Added
+- `RailsCodeHealth::ASTHelpers` module: shared AST traversal with scoped variants and visibility-aware def collection.
+- Fixture-based RSpec test suite under `spec/fixtures/code_samples/`.
+- New configuration group `smell_thresholds` for previously hard-coded values.
+
+### Fixed
+- `RubyAnalyzer#count_public_methods_in_class` now actually distinguishes public from private methods (including inline `private def foo`).
+- `RubyAnalyzer#count_parameters` now counts only true parameter nodes.
+- `RubyAnalyzer` nesting depth calculation no longer counts `:begin` and `:block` as nesting levels.
+- `RailsAnalyzer#count_controller_actions` no longer inverts public/private; the seven canonical RESTful actions are correctly counted, and private helpers are excluded.
+- `RailsAnalyzer#has_direct_model_access?` only fires when model calls appear inside public controller actions.
+- `RailsAnalyzer#has_business_logic?` uses stricter signals (business-verb calls on model receivers, transactions, loops with conditionals) instead of matching any compound `if` or any `.each do`.
+- Model `count_associations`, `count_validations`, `count_callbacks`, `count_scopes` count only top-level class body macros — no comments, strings, or nested-class matches.
+- `has_fat_model_smell?` uses class-scoped code-line count and class-scoped method count.
+- View `count_view_logic_lines` parses ERB fragments and no longer flags plain HTML that happens to contain `if`, `unless`, etc., in text.
+- Migration `has_data_changes?` recognizes `find_each`, `update`, `update_columns`, raw `connection.execute`, and other data-mutation methods.
+- Service `detect_service_dependencies` uses word boundaries — `Profile.` no longer matches the `File.` check.
+- God class, high complexity, parameter, and nesting smell thresholds are now read from configuration instead of inlined.
+
+### Changed (may affect scores)
+- Score changes are expected on any project where the above false positives or false negatives applied. Re-baseline before comparing to v0.2.0 reports.
+
 ## [0.2.0] - 2025-06-19
 
 ### Added
@@ -43,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reporting**: Detailed console output with health categories and JSON export
 - **CLI**: `rails-health` command with options for format, output file, and custom configuration
 
-[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gkosmo/rails_code_health/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gkosmo/rails_code_health/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gkosmo/rails_code_health/releases/tag/v0.1.0

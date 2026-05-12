@@ -127,6 +127,8 @@ Health scores range from 1.0 (critical) to 10.0 (excellent) based on:
 - **🔴 Alert (1.0-3.9)**: Significant problems requiring attention
 - **⚫ Critical (<1.0)**: Severe issues, immediate action needed
 
+> **Note on v0.3.0 scores:** v0.3.0 fixes several false positives and false negatives in the Rails-specific checks. Scores on the same codebase will move compared to v0.2.0. See the CHANGELOG for the list of changed checks.
+
 ## Configuration
 
 Create a custom `thresholds.json` file:
