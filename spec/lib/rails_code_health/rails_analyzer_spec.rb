@@ -715,4 +715,24 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       expect(result[:logic_lines]).to eq(0)
     end
   end
+
+  describe 'migration data changes (A6)' do
+    it 'does not flag a schema-only migration' do
+      path = RailsCodeHealthFixtures.path_for('migrations/schema_only_migration.rb')
+      result = described_class.new(path, :migration).analyze
+      expect(result[:has_data_changes]).to be false
+    end
+
+    it 'flags a migration that uses find_each + update_columns' do
+      path = RailsCodeHealthFixtures.path_for('migrations/migration_with_find_each.rb')
+      result = described_class.new(path, :migration).analyze
+      expect(result[:has_data_changes]).to be true
+    end
+
+    it 'flags a migration that runs raw SQL via connection.execute' do
+      path = RailsCodeHealthFixtures.path_for('migrations/migration_with_raw_sql.rb')
+      result = described_class.new(path, :migration).analyze
+      expect(result[:has_data_changes]).to be true
+    end
+  end
 end

@@ -428,10 +428,22 @@ module RailsCodeHealth
       smells
     end
 
+    DATA_CHANGE_METHODS = %i[
+      execute update_all delete_all
+      find_each update update_columns update_column
+      update! save save!
+    ].freeze
+
     # Migration analysis methods
     def has_data_changes?
-      data_methods = %w[execute update_all delete_all]
-      data_methods.any? { |method| @source.include?(method) }
+      return false unless @ast
+
+      found = false
+      find_nodes(@ast, :send) do |send_node|
+        method_name = send_node.children[1]
+        found = true if DATA_CHANGE_METHODS.include?(method_name)
+      end
+      found
     end
 
     def has_index_changes?
