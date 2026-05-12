@@ -132,6 +132,27 @@ RSpec.describe RailsCodeHealth::ASTHelpers do
     end
   end
 
+  describe '#erb_ruby_fragments' do
+    it 'extracts code from <% %> and <%= %>' do
+      source = "<p>Hello <%= name %></p>\n<% if signed_in? %>welcome<% end %>"
+      fragments = dummy.erb_ruby_fragments(source).to_a
+      expect(fragments).to contain_exactly(' name ', ' if signed_in? ', ' end ')
+    end
+
+    it 'handles multi-line tags' do
+      source = "<% users.each do |u|\n  next if u.banned\n %><p><%= u.name %></p>"
+      fragments = dummy.erb_ruby_fragments(source).to_a
+      expect(fragments.first).to include("users.each do |u|")
+      expect(fragments.first).to include("next if u.banned")
+    end
+
+    it 'returns no fragments for plain HTML' do
+      source = "<p>Just text mentioning if and unless and case in prose.</p>"
+      fragments = dummy.erb_ruby_fragments(source).to_a
+      expect(fragments).to be_empty
+    end
+  end
+
   describe '#class_body_sends' do
     it 'returns top-level sends in the class body, not inside methods' do
       source = <<~RUBY

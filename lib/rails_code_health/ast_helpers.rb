@@ -74,6 +74,16 @@ module RailsCodeHealth
       matches
     end
 
+    # Yields each Ruby code fragment inside <% %> / <%= %> / <%- %> tags.
+    # Multi-line tags are handled. Returns an Enumerator if no block given.
+    def erb_ruby_fragments(source)
+      return enum_for(:erb_ruby_fragments, source) unless block_given?
+
+      source.scan(/<%=?-?(.*?)-?%>/m) do |match|
+        yield match[0]
+      end
+    end
+
     # Like find_nodes, but does not descend into nested class/module/def/defs/sclass
     # nodes. The starting node itself is inspected; all children are inspected, but
     # nested scope-introducing constructs are not recursed into.
