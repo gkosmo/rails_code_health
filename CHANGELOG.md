@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Model `count_associations`, `count_validations`, `count_callbacks`, `count_scopes` count only top-level class body macros — no comments, strings, or nested-class matches.
 - `has_fat_model_smell?` uses class-scoped code-line count and class-scoped method count.
 - View `count_view_logic_lines` parses ERB fragments and no longer flags plain HTML that happens to contain `if`, `unless`, etc., in text.
-- Migration `has_data_changes?` recognizes `find_each`, `update`, `update_columns`, raw `connection.execute`, and other data-mutation methods.
+- Migration `has_data_changes?` recognizes `find_each`, `update`, `update_columns`, `update_column`, `update!`, `update_all`, `delete_all`, `save`, `save!`, raw `connection.execute`, and `execute`.
 - Service `detect_service_dependencies` uses word boundaries — `Profile.` no longer matches the `File.` check.
 - God class, high complexity, parameter, and nesting smell thresholds are now read from configuration instead of inlined.
 
