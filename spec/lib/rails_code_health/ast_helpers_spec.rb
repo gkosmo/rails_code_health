@@ -56,5 +56,27 @@ RSpec.describe RailsCodeHealth::ASTHelpers do
       # We only want sends at the class body level, not inside the method.
       expect(sends).to be_empty
     end
+
+    it 'yields scope-boundary children that match the target type' do
+      # nested_class.rb defines Outer with a nested Inner class.
+      # Searching for :class nodes inside the outer class should find Inner
+      # (it IS a scope boundary, but it matches the target type and is at
+      # this scope's level). It should be yielded, but not descended into.
+      source = File.read(RailsCodeHealthFixtures.path_for('ruby/nested_class.rb'))
+      outer_class = Parser::CurrentRuby.parse(source)
+
+      class_names = []
+      dummy.find_nodes_in_scope(outer_class, :class) do |class_node|
+        # Extract the class name. For a :class node, children[0] is a :const node
+        # whose last child is the class name symbol.
+        const_node = class_node.children[0]
+        class_names << const_node.children.last
+      end
+
+      # The starting node IS the outer class — find_nodes_in_scope yields the
+      # node itself if it matches the type (top of method). So we expect Outer
+      # AND Inner: both classes are in scope, but we don't descend into Inner.
+      expect(class_names).to contain_exactly(:Outer, :Inner)
+    end
   end
 end

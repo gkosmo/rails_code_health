@@ -12,8 +12,8 @@ module RailsCodeHealth
     end
 
     # Like find_nodes, but does not descend into nested class/module/def/defs/sclass
-    # nodes. The starting node itself is inspected; its body is walked, but nested
-    # scope-introducing constructs are not entered.
+    # nodes. The starting node itself is inspected; all children are inspected, but
+    # nested scope-introducing constructs are not recursed into.
     def find_nodes_in_scope(node, type, &block)
       return unless node.is_a?(Parser::AST::Node)
 
@@ -22,9 +22,9 @@ module RailsCodeHealth
       node.children.each do |child|
         next unless child.is_a?(Parser::AST::Node)
 
-        # If the child is a scope boundary AND is not the starting node itself,
-        # yield it if it matches the target type but do not recurse into it.
-        if SCOPE_BOUNDARY_TYPES.include?(child.type) && child != node
+        # Scope-boundary children get yielded if they match the target type,
+        # but we do not recurse into them.
+        if SCOPE_BOUNDARY_TYPES.include?(child.type)
           yield(child) if child.type == type
           next
         end
