@@ -21,6 +21,24 @@ RSpec.describe RailsCodeHealth::RubyAnalyzer do
     end
   end
 
+  describe 'nesting depth' do
+    let(:methods) do
+      fixture = RailsCodeHealthFixtures.path_for('ruby/method_with_begin_rescue.rb')
+      result = described_class.new(fixture).analyze
+      result[:method_metrics].each_with_object({}) { |m, h| h[m[:name]] = m }
+    end
+
+    it 'does not count :begin as a nesting level' do
+      # A bare begin/rescue should not inflate depth — the method body itself
+      # plus the rescue is depth 1 max, not 2 or 3.
+      expect(methods[:shallow][:nesting_depth]).to be <= 1
+    end
+
+    it 'counts true control-flow nesting' do
+      expect(methods[:deep][:nesting_depth]).to be >= 3
+    end
+  end
+
   describe 'parameter counts' do
     let(:methods) do
       fixture = RailsCodeHealthFixtures.path_for('ruby/method_with_kwargs.rb')

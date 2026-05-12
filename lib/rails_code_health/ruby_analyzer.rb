@@ -297,8 +297,10 @@ module RailsCodeHealth
       count
     end
 
+    NESTING_TYPES = %i[if case while until for].freeze
+
     def nesting_node?(node)
-      [:if, :case, :while, :until, :for, :begin, :block].include?(node.type)
+      NESTING_TYPES.include?(node.type)
     end
 
     def has_rescue_block?(node)
