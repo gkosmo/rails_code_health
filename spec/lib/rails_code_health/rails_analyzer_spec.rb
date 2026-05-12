@@ -639,5 +639,22 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
     ensure
       file&.close
     end
+
+    it 'does NOT flag controllers that only read AR attributes with process_ in the name' do
+      # Regression: `process_id` is a common attribute. Earlier impls flagged this.
+      source = <<~RUBY
+        class JobsController < ApplicationController
+          def show
+            @job_id = current_job.process_id
+            render json: { job_id: @job_id }
+          end
+        end
+      RUBY
+      file = Tempfile.new(['ctrl', '.rb']).tap { |f| f.write(source); f.rewind }
+      result = described_class.new(Pathname.new(file.path), :controller).analyze
+      expect(result[:has_business_logic]).to be false
+    ensure
+      file&.close
+    end
   end
 end

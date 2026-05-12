@@ -154,7 +154,10 @@ module RailsCodeHealth
     end
 
     BUSINESS_VERBS = %i[calculate compute process charge refund transition].freeze
-    BUSINESS_VERB_PREFIXES = %w[calculate_ compute_ process_].freeze
+    # Methods with these prefixes likely indicate business logic.
+    # `process_` was previously included but removed because of false positives
+    # on common AR attributes like `process_id`.
+    BUSINESS_VERB_PREFIXES = %w[calculate_ compute_].freeze
 
     def has_business_logic?
       return false unless @ast
@@ -168,7 +171,46 @@ module RailsCodeHealth
       found
     end
 
+    def detect_controller_smells
+      smells = []
+      
+      action_count = count_controller_actions
+      if action_count > 10
+        smells << {
+          type: :too_many_actions,
+          count: action_count,
+          severity: :high
+        }
+      end
+
+      unless uses_strong_parameters?
+        smells << {
+          type: :missing_strong_parameters,
+          severity: :medium
+        }
+      end
+
+      if has_direct_model_access?
+        smells << {
+          type: :direct_model_access,
+          severity: :medium
+        }
+      end
+
+      if has_business_logic?
+        smells << {
+          type: :business_logic_in_controller,
+          severity: :high
+        }
+      end
+
+      smells
+    end
+
     def action_has_business_logic?(def_node)
+      # NOTE: arithmetic signal (plan A2 item 2) intentionally not implemented —
+      # accuracy of detecting "two non-literal operands" was deemed not worth
+      # the false positive risk in v0.3.0.
       return true if business_verb_call?(def_node)
       return true if transaction_block?(def_node)
       return true if loop_with_conditional?(def_node)
@@ -208,42 +250,6 @@ module RailsCodeHealth
         find_nodes(block_node.children[2], :case) { found = true }
       end
       found
-    end
-
-    def detect_controller_smells
-      smells = []
-      
-      action_count = count_controller_actions
-      if action_count > 10
-        smells << {
-          type: :too_many_actions,
-          count: action_count,
-          severity: :high
-        }
-      end
-
-      unless uses_strong_parameters?
-        smells << {
-          type: :missing_strong_parameters,
-          severity: :medium
-        }
-      end
-
-      if has_direct_model_access?
-        smells << {
-          type: :direct_model_access,
-          severity: :medium
-        }
-      end
-
-      if has_business_logic?
-        smells << {
-          type: :business_logic_in_controller,
-          severity: :high
-        }
-      end
-
-      smells
     end
 
     # Model analysis methods
