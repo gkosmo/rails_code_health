@@ -79,4 +79,67 @@ RSpec.describe RailsCodeHealth::ASTHelpers do
       expect(class_names).to contain_exactly(:Outer, :Inner)
     end
   end
+
+  describe '#defs_by_visibility' do
+    it 'classifies bare modifier blocks (private/protected/public)' do
+      source = File.read(RailsCodeHealthFixtures.path_for('ruby/class_with_private_methods.rb'))
+      class_node = Parser::CurrentRuby.parse(source) # top-level is the class
+      result = dummy.defs_by_visibility(class_node)
+
+      expect(result[:public].map { |n| n.children[0] }).to contain_exactly(:pub_one, :pub_two, :pub_three)
+      expect(result[:private].map { |n| n.children[0] }).to contain_exactly(:priv_one, :priv_two)
+      expect(result[:protected].map { |n| n.children[0] }).to contain_exactly(:prot_one)
+    end
+
+    it 'classifies inline `private def foo` correctly' do
+      source = File.read(RailsCodeHealthFixtures.path_for('ruby/class_with_inline_private.rb'))
+      class_node = Parser::CurrentRuby.parse(source)
+      result = dummy.defs_by_visibility(class_node)
+
+      expect(result[:public].map { |n| n.children[0] }).to contain_exactly(:pub_one, :pub_two)
+      expect(result[:private].map { |n| n.children[0] }).to contain_exactly(:priv_one)
+    end
+
+    it 'returns empty groups for a class with no methods' do
+      class_node = Parser::CurrentRuby.parse("class Empty\nend")
+      result = dummy.defs_by_visibility(class_node)
+      expect(result[:public]).to eq([])
+      expect(result[:private]).to eq([])
+      expect(result[:protected]).to eq([])
+    end
+  end
+
+  describe '#class_body_sends' do
+    it 'returns top-level sends in the class body, not inside methods' do
+      source = <<~RUBY
+        class Foo
+          has_many :bars
+          validates :name, presence: true
+          def go
+            has_many :ignored # this is inside a method body
+          end
+        end
+      RUBY
+      class_node = Parser::CurrentRuby.parse(source)
+
+      has_many_sends = dummy.class_body_sends(class_node, :has_many)
+      validates_sends = dummy.class_body_sends(class_node, :validates)
+
+      expect(has_many_sends.size).to eq(1)
+      expect(validates_sends.size).to eq(1)
+    end
+
+    it 'does not match calls inside nested classes/modules' do
+      source = <<~RUBY
+        class Foo
+          has_many :outers
+          class Bar
+            has_many :inners
+          end
+        end
+      RUBY
+      class_node = Parser::CurrentRuby.parse(source)
+      expect(dummy.class_body_sends(class_node, :has_many).size).to eq(1)
+    end
+  end
 end
