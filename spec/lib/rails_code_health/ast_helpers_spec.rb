@@ -151,6 +151,12 @@ RSpec.describe RailsCodeHealth::ASTHelpers do
       fragments = dummy.erb_ruby_fragments(source).to_a
       expect(fragments).to be_empty
     end
+
+    it 'skips ERB comment tags' do
+      source = "<% if admin? %>real<% end %>\n<%# if admin? %>this is a comment<%# end %>"
+      fragments = dummy.erb_ruby_fragments(source).to_a
+      expect(fragments).to contain_exactly(' if admin? ', ' end ')
+    end
   end
 
   describe '#class_body_sends' do

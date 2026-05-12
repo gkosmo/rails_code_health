@@ -75,11 +75,12 @@ module RailsCodeHealth
     end
 
     # Yields each Ruby code fragment inside <% %> / <%= %> / <%- %> tags.
-    # Multi-line tags are handled. Returns an Enumerator if no block given.
+    # Multi-line tags are handled. ERB comment tags (<%# ... %>) are skipped.
+    # Returns an Enumerator if no block given.
     def erb_ruby_fragments(source)
       return enum_for(:erb_ruby_fragments, source) unless block_given?
 
-      source.scan(/<%=?-?(.*?)-?%>/m) do |match|
+      source.scan(/<%(?!#)=?-?(.*?)-?%>/m) do |match|
         yield match[0]
       end
     end
