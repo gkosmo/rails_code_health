@@ -20,4 +20,28 @@ RSpec.describe RailsCodeHealth::RubyAnalyzer do
       expect(example_class[:public_method_count]).to eq(2)
     end
   end
+
+  describe 'parameter counts' do
+    let(:methods) do
+      fixture = RailsCodeHealthFixtures.path_for('ruby/method_with_kwargs.rb')
+      result = described_class.new(fixture).analyze
+      result[:method_metrics].each_with_object({}) { |m, h| h[m[:name]] = m }
+    end
+
+    it 'counts positional parameters' do
+      expect(methods[:positional_only][:parameter_count]).to eq(3)
+    end
+
+    it 'counts required and optional keyword parameters' do
+      expect(methods[:with_kwargs][:parameter_count]).to eq(3) # a, b:, c:
+    end
+
+    it 'counts splat, double-splat, and block as parameters' do
+      expect(methods[:with_splat][:parameter_count]).to eq(3)
+    end
+
+    it 'returns 0 for empty argument list' do
+      expect(methods[:empty_method][:parameter_count]).to eq(0)
+    end
+  end
 end

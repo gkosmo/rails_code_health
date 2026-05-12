@@ -238,11 +238,13 @@ module RailsCodeHealth
       defs_by_visibility(class_node)[:public].size
     end
 
+    PARAM_TYPES = %i[arg optarg restarg kwarg kwoptarg kwrestarg blockarg].freeze
+
     def count_parameters(method_node)
       args_node = method_node.children[1]
-      return 0 unless args_node
-      
-      args_node.children.count
+      return 0 unless args_node.is_a?(Parser::AST::Node)
+
+      args_node.children.count { |c| c.is_a?(Parser::AST::Node) && PARAM_TYPES.include?(c.type) }
     end
 
     def extract_class_name(class_node)
