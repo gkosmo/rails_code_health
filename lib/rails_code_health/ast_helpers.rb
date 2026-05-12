@@ -14,7 +14,11 @@ module RailsCodeHealth
 
     # Returns a hash { public: [def_nodes], private: [def_nodes], protected: [def_nodes] }
     # for the given class node. Handles bare modifier blocks and inline `private def foo`.
-    # `class << self` is best-effort: any defs inside it are NOT included here.
+    # Defs inside `class << self` are excluded (the :sclass node is not descended into).
+    #
+    # NOTE: `private :symbol_name` / `private :a, :b` forms are NOT handled —
+    # methods so marked stay classified as :public. Only bare modifier blocks
+    # (`private` on its own line) and inline `private def foo` are recognized.
     def defs_by_visibility(class_node)
       result = { public: [], private: [], protected: [] }
       return result unless class_node.is_a?(Parser::AST::Node)
@@ -49,6 +53,11 @@ module RailsCodeHealth
 
     # Returns direct `:send` nodes in the class body matching the given method name.
     # Does not descend into nested classes, modules, or method bodies.
+    #
+    # NOTE: calls wrapped in a block (e.g., `included do ... end` in concerns)
+    # are NOT matched — the wrapping :block node is not a :send. Use
+    # class_body_children directly and inspect :block nodes if you need to find
+    # macro calls inside such wrappers.
     def class_body_sends(class_node, method_name)
       matches = []
       return matches unless class_node.is_a?(Parser::AST::Node)

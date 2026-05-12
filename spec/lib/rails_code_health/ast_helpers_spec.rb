@@ -107,6 +107,29 @@ RSpec.describe RailsCodeHealth::ASTHelpers do
       expect(result[:private]).to eq([])
       expect(result[:protected]).to eq([])
     end
+
+    it 'excludes defs inside class << self' do
+      source = <<~RUBY
+        class Foo
+          class << self
+            def class_method; end
+          end
+          def instance_method; end
+        end
+      RUBY
+      node = Parser::CurrentRuby.parse(source)
+      result = dummy.defs_by_visibility(node)
+      expect(result[:public].map { |n| n.children[0] }).to contain_exactly(:instance_method)
+      expect(result[:private]).to eq([])
+      expect(result[:protected]).to eq([])
+    end
+
+    it 'works on a module node' do
+      node = Parser::CurrentRuby.parse("module M; def a; end; private; def b; end; end")
+      result = dummy.defs_by_visibility(node)
+      expect(result[:public].map { |n| n.children[0] }).to eq([:a])
+      expect(result[:private].map { |n| n.children[0] }).to eq([:b])
+    end
   end
 
   describe '#class_body_sends' do
