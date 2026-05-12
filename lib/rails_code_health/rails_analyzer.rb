@@ -123,17 +123,25 @@ module RailsCodeHealth
       @source.include?('params.require') || @source.include?('params.permit')
     end
 
+    DIRECT_MODEL_METHODS = %i[find find_by where create create! update update! all first last destroy_all].freeze
+
     def has_direct_model_access?
-      # Look for direct ActiveRecord calls in controller actions
-      model_patterns = [
-        /\w+\.find\(/,
-        /\w+\.where\(/,
-        /\w+\.create\(/,
-        /\w+\.update\(/,
-        /\w+\.all/
-      ]
-      
-      model_patterns.any? { |pattern| @source.match?(pattern) }
+      return false unless @ast
+
+      found = false
+      find_nodes(@ast, :class) do |class_node|
+        defs_by_visibility(class_node)[:public].each do |def_node|
+          find_nodes(def_node, :send) do |send_node|
+            receiver = send_node.children[0]
+            method_name = send_node.children[1]
+            # Receiver must be a constant (a likely model class) and the method must be an AR method.
+            next unless receiver.is_a?(Parser::AST::Node) && receiver.type == :const
+            next unless DIRECT_MODEL_METHODS.include?(method_name)
+            found = true
+          end
+        end
+      end
+      found
     end
 
     def detect_response_formats

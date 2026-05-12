@@ -137,6 +137,20 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
     end
   end
 
+  describe 'has_direct_model_access? (A1)' do
+    it 'flags model access inside a public action' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_direct_model_in_action.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:has_direct_model_access]).to be true
+    end
+
+    it 'does NOT flag model access only inside a private helper' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_model_in_private_helper.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:has_direct_model_access]).to be false
+    end
+  end
+
   describe 'controller action counting (A3)' do
     it 'counts all seven canonical RESTful actions in a thin controller' do
       path = RailsCodeHealthFixtures.path_for('controllers/thin_restful_controller.rb')
