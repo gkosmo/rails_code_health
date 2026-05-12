@@ -6,6 +6,7 @@ require 'json'
 require 'pathname'
 
 require_relative 'rails_code_health/version'
+require_relative 'rails_code_health/ast_helpers'
 require_relative 'rails_code_health/configuration'
 require_relative 'rails_code_health/project_detector'
 require_relative 'rails_code_health/file_analyzer'
