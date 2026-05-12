@@ -9,7 +9,10 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
 
   describe 'controller analysis' do
     context 'with business logic detection' do
-      it 'detects complex conditionals' do
+      it 'does not flag compound authorization conditionals as business logic' do
+        # Under the stricter AST-scoped rules, a plain `if x && y` authorization
+        # check is NOT business logic. Only business-verb calls, transactions, or
+        # loops-with-conditionals are flagged.
         temp_file.write(<<~RUBY)
           class UsersController < ApplicationController
             def show
@@ -24,10 +27,7 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
         analyzer = described_class.new(file_path, :controller)
         result = analyzer.analyze
 
-        expect(result[:has_business_logic]).to be true
-        expect(result[:rails_smells]).to include(
-          hash_including(type: :business_logic_in_controller, severity: :high)
-        )
+        expect(result[:has_business_logic]).to be false
       end
 
       it 'detects iteration patterns' do
@@ -67,7 +67,10 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
         expect(result[:has_business_logic]).to be true
       end
 
-      it 'detects aggregation operations' do
+      it 'does not flag plain aggregation queries as business logic' do
+        # Under the stricter AST-scoped rules, AR aggregation calls (sum, count,
+        # average) are not business logic signals. Only business-verb calls,
+        # transactions, or loops-with-conditionals are flagged.
         temp_file.write(<<~RUBY)
           class ReportsController < ApplicationController
             def dashboard
@@ -82,7 +85,7 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
         analyzer = described_class.new(file_path, :controller)
         result = analyzer.analyze
 
-        expect(result[:has_business_logic]).to be true
+        expect(result[:has_business_logic]).to be false
       end
 
       it 'detects database transactions' do
@@ -591,6 +594,50 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       expect(result[:rails_smells]).to include(
         hash_including(type: :empty_serializer, severity: :low)
       )
+    end
+  end
+
+  describe 'has_business_logic? (A2)' do
+    it 'flags business-verb calls on model receivers' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_business_logic.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:has_business_logic]).to be true
+    end
+
+    it 'does NOT flag a controller that only does compound authorization checks' do
+      # This used to trigger because the old regex matched `if x && y`.
+      source = <<~RUBY
+        class PostsController < ApplicationController
+          def show
+            if logged_in? && current_user.admin?
+              @post = Post.find(params[:id])
+            else
+              redirect_to root_path
+            end
+          end
+        end
+      RUBY
+      file = Tempfile.new(['ctrl', '.rb']).tap { |f| f.write(source); f.rewind }
+      result = described_class.new(Pathname.new(file.path), :controller).analyze
+      expect(result[:has_business_logic]).to be false
+    ensure
+      file&.close
+    end
+
+    it 'does NOT flag plain iteration without a conditional inside' do
+      source = <<~RUBY
+        class UsersController < ApplicationController
+          def index
+            @users = User.all
+            @users.each { |u| u.touch }
+          end
+        end
+      RUBY
+      file = Tempfile.new(['ctrl', '.rb']).tap { |f| f.write(source); f.rewind }
+      result = described_class.new(Pathname.new(file.path), :controller).analyze
+      expect(result[:has_business_logic]).to be false
+    ensure
+      file&.close
     end
   end
 end

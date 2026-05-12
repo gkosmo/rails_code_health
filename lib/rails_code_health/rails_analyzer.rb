@@ -153,16 +153,61 @@ module RailsCodeHealth
       formats
     end
 
+    BUSINESS_VERBS = %i[calculate compute process charge refund transition].freeze
+    BUSINESS_VERB_PREFIXES = %w[calculate_ compute_ process_].freeze
+
     def has_business_logic?
-      business_logic_patterns = [
-        /if.*&&.*/, # Complex conditionals
-        /\.each\s*do/, # Iteration
-        /\b(calculate|compute|process)\b/, # Business operations
-        /\.(sum|count|average)\b/, # Aggregations
-        /transaction\s*do/ # Database transactions
-      ]
-      
-      business_logic_patterns.any? { |pattern| @source.match?(pattern) }
+      return false unless @ast
+
+      found = false
+      find_nodes(@ast, :class) do |class_node|
+        defs_by_visibility(class_node)[:public].each do |def_node|
+          found = true if action_has_business_logic?(def_node)
+        end
+      end
+      found
+    end
+
+    def action_has_business_logic?(def_node)
+      return true if business_verb_call?(def_node)
+      return true if transaction_block?(def_node)
+      return true if loop_with_conditional?(def_node)
+      false
+    end
+
+    def business_verb_call?(def_node)
+      found = false
+      find_nodes(def_node, :send) do |send_node|
+        method_name = send_node.children[1].to_s
+        if BUSINESS_VERBS.include?(method_name.to_sym) ||
+           BUSINESS_VERB_PREFIXES.any? { |p| method_name.start_with?(p) }
+          found = true
+        end
+      end
+      found
+    end
+
+    def transaction_block?(def_node)
+      found = false
+      find_nodes(def_node, :block) do |block_node|
+        send_node = block_node.children[0]
+        next unless send_node.is_a?(Parser::AST::Node) && send_node.type == :send
+        found = true if send_node.children[1] == :transaction
+      end
+      found
+    end
+
+    def loop_with_conditional?(def_node)
+      found = false
+      find_nodes(def_node, :block) do |block_node|
+        send_node = block_node.children[0]
+        next unless send_node.is_a?(Parser::AST::Node) && send_node.type == :send
+        next unless %i[each map select reject].include?(send_node.children[1])
+        # Look for conditionals inside the block body.
+        find_nodes(block_node.children[2], :if) { found = true }
+        find_nodes(block_node.children[2], :case) { found = true }
+      end
+      found
     end
 
     def detect_controller_smells
