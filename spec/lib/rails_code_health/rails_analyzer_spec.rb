@@ -735,4 +735,19 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       expect(result[:has_data_changes]).to be true
     end
   end
+
+  describe 'service dependency detection (A8)' do
+    it 'returns no dependencies for a trivial service' do
+      path = RailsCodeHealthFixtures.path_for('services/plain_service.rb')
+      result = described_class.new(path, :service).analyze
+      expect(result[:dependencies]).to eq([])
+    end
+
+    it 'does NOT mistake Profile. for File.' do
+      path = RailsCodeHealthFixtures.path_for('services/service_with_profile_model.rb')
+      result = described_class.new(path, :service).analyze
+      expect(result[:dependencies]).to include(:active_record)
+      expect(result[:dependencies]).not_to include(:file_system)
+    end
+  end
 end

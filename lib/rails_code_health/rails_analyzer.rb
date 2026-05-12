@@ -522,34 +522,29 @@ module RailsCodeHealth
     end
 
     def detect_service_dependencies
-      dependencies = []
-      
-      # ActiveRecord usage
-      if @source.match?(/\w+\.find\(/) || @source.match?(/\w+\.where\(/) || @source.match?(/\w+\.create\(/)
-        dependencies << :active_record
+      deps = []
+
+      if @source.match?(/\b(?:[A-Z]\w*)\.(?:find|find_by|where|create|create!|update|update!|all|first|last)\b/)
+        deps << :active_record
       end
-      
-      # External APIs
-      if @source.include?('Net::HTTP') || @source.include?('HTTParty') || @source.include?('Faraday')
-        dependencies << :external_api
+
+      if @source.match?(/\b(?:Net::HTTP|HTTParty|Faraday|RestClient|Typhoeus)\b/)
+        deps << :external_api
       end
-      
-      # File system
-      if @source.include?('File.') || @source.include?('Dir.') || @source.include?('FileUtils')
-        dependencies << :file_system
+
+      if @source.match?(/\b(?:File|Dir|FileUtils|Pathname)\.\w+/)
+        deps << :file_system
       end
-      
-      # Email
-      if @source.include?('Mailer') || @source.include?('deliver') || @source.include?('ActionMailer')
-        dependencies << :email
+
+      if @source.match?(/\b(?:Mailer|ActionMailer)\b/) || @source.match?(/\.deliver(?:_now|_later)?\b/)
+        deps << :email
       end
-      
-      # Cache
-      if @source.include?('Rails.cache') || @source.include?('cache_store') || @source.include?('Redis')
-        dependencies << :cache
+
+      if @source.match?(/\bRails\.cache\b/) || @source.match?(/\bRedis\b/) || @source.match?(/\bcache_store\b/)
+        deps << :cache
       end
-      
-      dependencies.uniq
+
+      deps.uniq
     end
 
     def detect_error_handling
