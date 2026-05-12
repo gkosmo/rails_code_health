@@ -298,11 +298,24 @@ module RailsCodeHealth
     def has_fat_model_smell?
       return false unless @ast
 
-      line_count = @source.lines.count
+      class_node = nil
+      find_nodes(@ast, :class) { |n| class_node ||= n }
+      return false unless class_node
+
+      code_lines = code_line_count(class_node)
       method_count = 0
-      find_nodes(@ast, :def) { method_count += 1 }
-      
-      line_count > 200 && method_count > 15
+      find_nodes_in_scope(class_node, :def) { method_count += 1 }
+
+      code_lines > 200 && method_count > 15
+    end
+
+    def code_line_count(node)
+      return 0 unless node.respond_to?(:loc) && node.loc.respond_to?(:expression)
+      expr = node.loc.expression
+      return 0 unless expr
+
+      lines = expr.source.lines
+      lines.count { |line| line.strip != '' && !line.strip.start_with?('#') }
     end
 
     def detect_model_smells

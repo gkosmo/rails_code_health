@@ -677,4 +677,18 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       expect(result[:validation_count]).to eq(1)
     end
   end
+
+  describe 'has_fat_model_smell? (A5)' do
+    it 'does not flag a thin model' do
+      path = RailsCodeHealthFixtures.path_for('models/thin_model.rb')
+      result = described_class.new(path, :model).analyze
+      expect(result[:has_fat_model_smell]).to be false
+    end
+
+    it 'flags a model that exceeds thresholds in class-scoped lines AND methods' do
+      path = RailsCodeHealthFixtures.path_for('models/fat_model.rb')
+      result = described_class.new(path, :model).analyze
+      expect(result[:has_fat_model_smell]).to be true
+    end
+  end
 end
