@@ -1,5 +1,7 @@
 module RailsCodeHealth
   class RailsAnalyzer
+    include RailsCodeHealth::ASTHelpers
+
     def initialize(file_path, file_type)
       @file_path = file_path
       @file_type = file_type
@@ -693,20 +695,5 @@ module RailsCodeHealth
       smells
     end
 
-    # Helper methods
-    def find_nodes(node, type, &block)
-      return unless node.is_a?(Parser::AST::Node)
-
-      yield(node) if node.type == type
-
-      node.children.each do |child|
-        find_nodes(child, type, &block)
-      end
-    end
-
-    def private_controller_method?(method_name)
-      %w[show new edit create update destroy].include?(method_name) ||
-        method_name.end_with?('_params')
-    end
   end
 end
