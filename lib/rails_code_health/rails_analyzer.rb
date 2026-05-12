@@ -252,42 +252,47 @@ module RailsCodeHealth
       found
     end
 
+    ASSOCIATION_MACROS = %i[belongs_to has_one has_many has_and_belongs_to_many].freeze
+    VALIDATION_MACROS = %i[validates validates_presence_of validates_uniqueness_of validates_format_of validates_length_of validates_numericality_of validates_inclusion_of validates_exclusion_of validates_acceptance_of validates_confirmation_of].freeze
+    CALLBACK_MACROS = %i[before_save after_save before_create after_create before_update after_update before_destroy after_destroy after_commit after_rollback before_validation after_validation].freeze
+
     # Model analysis methods
     def count_associations
-      associations = 0
-      association_methods = %w[belongs_to has_one has_many has_and_belongs_to_many]
-      
-      association_methods.each do |method|
-        associations += @source.scan(/#{method}\s+:/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        ASSOCIATION_MACROS.each do |macro|
+          total += class_body_sends(class_node, macro).size
+        end
       end
-      
-      associations
+      total
     end
 
     def count_validations
-      validations = 0
-      validation_methods = %w[validates validates_presence_of validates_uniqueness_of validates_format_of]
-      
-      validation_methods.each do |method|
-        validations += @source.scan(/#{method}\s+/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        VALIDATION_MACROS.each do |macro|
+          total += class_body_sends(class_node, macro).size
+        end
       end
-      
-      validations
+      total
     end
 
     def count_callbacks
-      callbacks = 0
-      callback_methods = %w[before_save after_save before_create after_create before_update after_update before_destroy after_destroy]
-      
-      callback_methods.each do |method|
-        callbacks += @source.scan(/#{method}\s+/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        CALLBACK_MACROS.each do |macro|
+          total += class_body_sends(class_node, macro).size
+        end
       end
-      
-      callbacks
+      total
     end
 
     def count_scopes
-      @source.scan(/scope\s+:/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        total += class_body_sends(class_node, :scope).size
+      end
+      total
     end
 
     def has_fat_model_smell?

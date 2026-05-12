@@ -657,4 +657,24 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       file&.close
     end
   end
+
+  describe 'model macro counts (A4)' do
+    it 'does not count commented-out macros' do
+      path = RailsCodeHealthFixtures.path_for('models/model_with_validations_in_comments.rb')
+      result = described_class.new(path, :model).analyze
+      expect(result[:validation_count]).to eq(1)
+      expect(result[:association_count]).to eq(2) # belongs_to :user, has_many :comments
+    end
+
+    it 'counts macros only at the class body level' do
+      # `included do ... end` blocks live inside the class body but their contents
+      # are inside a block, so we don't descend into them.
+      path = RailsCodeHealthFixtures.path_for('models/model_with_concerns_block.rb')
+      result = described_class.new(path, :model).analyze
+      # Top-level: has_many :tags (1 association), validates :title (1 validation).
+      # The `included do` content is NOT counted.
+      expect(result[:association_count]).to eq(1)
+      expect(result[:validation_count]).to eq(1)
+    end
+  end
 end
