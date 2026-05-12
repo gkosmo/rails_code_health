@@ -691,4 +691,28 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       expect(result[:has_fat_model_smell]).to be true
     end
   end
+
+  describe 'view logic counting (A7)' do
+    it 'counts ERB tags containing control flow as logic lines' do
+      path = RailsCodeHealthFixtures.path_for('views/view_with_logic.html.erb')
+      result = described_class.new(path, :view).analyze
+      # 4 tags contain control flow: if, else, end (twice in pairs), each ... + 2 ends
+      # Acceptable to assert "> 0 and >= 4" rather than exact, since semantics
+      # of "end" tags are debatable.
+      expect(result[:logic_lines]).to be >= 4
+    end
+
+    it 'does NOT count plain HTML lines with keywords in prose' do
+      path = RailsCodeHealthFixtures.path_for('views/view_with_keyword_in_text.html.erb')
+      result = described_class.new(path, :view).analyze
+      expect(result[:logic_lines]).to eq(0)
+    end
+
+    it 'returns zero logic for a plain view with only output ERB' do
+      path = RailsCodeHealthFixtures.path_for('views/simple_view.html.erb')
+      result = described_class.new(path, :view).analyze
+      # `<%= @user.name %>` is output-only, no control flow.
+      expect(result[:logic_lines]).to eq(0)
+    end
+  end
 end

@@ -348,16 +348,16 @@ module RailsCodeHealth
       smells
     end
 
+    VIEW_CONTROL_FLOW_KEYWORDS = %w[if unless elsif else case for while end].freeze
+
     # View analysis methods
-    def count_view_logic_lines(lines)
-      logic_count = 0
-      
-      lines.each do |line|
-        # Count Ruby code blocks in ERB
-        logic_count += 1 if line.match?(/<%((?!%>).)*%>/) || line.match?(/<%((?!%>).)*if|unless|case|for|while/)
+    def count_view_logic_lines(_lines)
+      count = 0
+      erb_ruby_fragments(@source).each do |ruby|
+        tokens = ruby.scan(/\b\w+\b/)
+        count += 1 if (tokens & VIEW_CONTROL_FLOW_KEYWORDS).any?
       end
-      
-      logic_count
+      count
     end
 
     def has_inline_styles?
