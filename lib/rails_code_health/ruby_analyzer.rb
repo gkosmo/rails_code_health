@@ -1,5 +1,6 @@
 module RailsCodeHealth
   class RubyAnalyzer
+    include RailsCodeHealth::ASTHelpers
     def initialize(file_path)
       @file_path = file_path
       @source = File.read(file_path)
@@ -87,17 +88,6 @@ module RailsCodeHealth
       smells.concat(detect_too_many_parameters)
       smells.concat(detect_nested_conditionals)
       smells
-    end
-
-    # AST traversal helper
-    def find_nodes(node, type, &block)
-      return unless node.is_a?(Parser::AST::Node)
-
-      yield(node) if node.type == type
-
-      node.children.each do |child|
-        find_nodes(child, type, &block)
-      end
     end
 
     # Complexity calculations
@@ -245,8 +235,7 @@ module RailsCodeHealth
     end
 
     def count_public_methods_in_class(class_node)
-      # This is a simplified version - in reality, you'd need to track visibility modifiers
-      count_methods_in_class(class_node)
+      defs_by_visibility(class_node)[:public].size
     end
 
     def count_parameters(method_node)
