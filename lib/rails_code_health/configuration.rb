@@ -68,6 +68,13 @@ module RailsCodeHealth
           'dependency_count' => { 'green' => 3, 'yellow' => 5, 'red' => 8 },
           'complexity_score' => { 'green' => 10, 'yellow' => 15, 'red' => 25 }
         },
+        'smell_thresholds' => {
+          'god_class_lines' => 400,
+          'god_class_methods' => 20,
+          'high_complexity_method' => 15,
+          'too_many_parameters' => 5,
+          'nested_conditionals' => 4
+        },
         'file_type_multipliers' => {
           'controllers' => 1.2,
           'models' => 1.0,

@@ -156,11 +156,12 @@ module RailsCodeHealth
 
     def detect_god_classes
       classes = []
+      t = RailsCodeHealth.configuration.thresholds['smell_thresholds']
       find_nodes(@ast, :class) do |node|
         line_count = count_lines_in_node(node)
         method_count = count_methods_in_class(node)
-        
-        if line_count > 400 && method_count > 20
+
+        if line_count > t['god_class_lines'] && method_count > t['god_class_methods']
           classes << {
             type: :god_class,
             class_name: extract_class_name(node),
@@ -175,9 +176,10 @@ module RailsCodeHealth
 
     def detect_high_complexity_methods
       methods = []
+      threshold = RailsCodeHealth.configuration.thresholds['smell_thresholds']['high_complexity_method']
       find_nodes(@ast, :def) do |node|
         complexity = calculate_cyclomatic_complexity(node)
-        if complexity > 15
+        if complexity > threshold
           methods << {
             type: :high_complexity,
             method_name: node.children[0],
@@ -191,9 +193,10 @@ module RailsCodeHealth
 
     def detect_too_many_parameters
       methods = []
+      threshold = RailsCodeHealth.configuration.thresholds['smell_thresholds']['too_many_parameters']
       find_nodes(@ast, :def) do |node|
         param_count = count_parameters(node)
-        if param_count > 5
+        if param_count > threshold
           methods << {
             type: :too_many_parameters,
             method_name: node.children[0],
@@ -207,9 +210,10 @@ module RailsCodeHealth
 
     def detect_nested_conditionals
       methods = []
+      threshold = RailsCodeHealth.configuration.thresholds['smell_thresholds']['nested_conditionals']
       find_nodes(@ast, :def) do |node|
         max_depth = calculate_max_nesting_depth(node)
-        if max_depth > 4
+        if max_depth > threshold
           methods << {
             type: :nested_conditionals,
             method_name: node.children[0],
