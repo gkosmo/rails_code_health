@@ -137,6 +137,22 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
     end
   end
 
+  describe 'controller action counting (A3)' do
+    it 'counts all seven canonical RESTful actions in a thin controller' do
+      path = RailsCodeHealthFixtures.path_for('controllers/thin_restful_controller.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:action_count]).to eq(7)
+    end
+
+    it 'excludes private methods from the action count' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_private_helpers.rb')
+      result = described_class.new(path, :controller).analyze
+      # public: index, show, download = 3
+      # private: load_report, report_params (should NOT count)
+      expect(result[:action_count]).to eq(3)
+    end
+  end
+
   describe 'service analysis' do
     it 'detects instance call method' do
       temp_file.write(<<~RUBY)

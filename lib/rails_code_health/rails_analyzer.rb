@@ -106,11 +106,10 @@ module RailsCodeHealth
       return 0 unless @ast
 
       action_count = 0
-      find_nodes(@ast, :def) do |node|
-        method_name = node.children[0].to_s
-        # Skip private methods and Rails internal methods
-        unless method_name.start_with?('_') || private_controller_method?(method_name)
-          action_count += 1
+      find_nodes(@ast, :class) do |class_node|
+        defs_by_visibility(class_node)[:public].each do |def_node|
+          name = def_node.children[0].to_s
+          action_count += 1 unless name.start_with?('_')
         end
       end
       action_count
