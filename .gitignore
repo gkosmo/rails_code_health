@@ -67,3 +67,6 @@ Thumbs.db
 
 # ASDF version manager
 .tool-versions
+
+# Git worktrees
+.worktrees/
