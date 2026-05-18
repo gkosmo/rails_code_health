@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-18
+
+### Fixed
+- `ReportGenerator` no longer includes migration files in the "Top Performing Files" showcase. Migrations are almost always trivially simple by construction, so they routinely crowded out genuinely well-written healthy files in the top-5 list. Migrations are still analyzed and still appear in the "Files Needing Most Attention" list when problematic.
+
+### Added
+- `docs/index.html` static landing page for GitHub Pages, explaining the why and how of the gem.
+
 ## [0.3.0] - 2026-05-12
 
 ### Added
@@ -73,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reporting**: Detailed console output with health categories and JSON export
 - **CLI**: `rails-health` command with options for format, output file, and custom configuration
 
-[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/gkosmo/rails_code_health/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/gkosmo/rails_code_health/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gkosmo/rails_code_health/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gkosmo/rails_code_health/releases/tag/v0.1.0
