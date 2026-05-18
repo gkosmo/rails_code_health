@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-18
+
+### Added
+- `--fail-under SCORE` CLI flag: exits with code `2` when the average health score is below the given threshold. Lets teams gate CI builds on overall code health.
+- `--max-critical N` CLI flag: exits with code `2` when more than `N` files fall into the Critical category. Useful for blocking PRs that introduce severely unhealthy files.
+- GitHub Actions example in the README and landing page.
+
+### Fixed
+- Removed dead `config/tresholds.json` file (misspelled, never loaded by the gem) and the unreachable file-loading branch in `Configuration#load_default_thresholds`. The hardcoded defaults in `Configuration#default_hardcoded_thresholds` are now the single source of truth for the gem's built-in thresholds. User-supplied configs via `--config` continue to work unchanged.
+
+### Changed
+- Removed `config/**/*` from `gemspec`'s shipped files (the directory no longer exists).
+
 ## [0.3.1] - 2026-05-18
 
 ### Fixed
@@ -81,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reporting**: Detailed console output with health categories and JSON export
 - **CLI**: `rails-health` command with options for format, output file, and custom configuration
 
-[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/gkosmo/rails_code_health/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/gkosmo/rails_code_health/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/gkosmo/rails_code_health/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gkosmo/rails_code_health/compare/v0.1.0...v0.2.0
