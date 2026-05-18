@@ -183,7 +183,7 @@ module RailsCodeHealth
       end
       
       # Show best files if we have healthy ones
-      healthy_files = @results.select { |r| r[:health_category] == :healthy }
+      healthy_files = @results.select { |r| r[:health_category] == :healthy && r[:file_type] != :migration }
       if healthy_files.any?
         detailed << "✅ Top Performing Files:"
         detailed << ""
