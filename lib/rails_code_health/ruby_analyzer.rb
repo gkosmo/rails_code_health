@@ -1,5 +1,6 @@
 module RailsCodeHealth
   class RubyAnalyzer
+    include RailsCodeHealth::ASTHelpers
     def initialize(file_path)
       @file_path = file_path
       @source = File.read(file_path)
@@ -89,17 +90,6 @@ module RailsCodeHealth
       smells
     end
 
-    # AST traversal helper
-    def find_nodes(node, type, &block)
-      return unless node.is_a?(Parser::AST::Node)
-
-      yield(node) if node.type == type
-
-      node.children.each do |child|
-        find_nodes(child, type, &block)
-      end
-    end
-
     # Complexity calculations
     def calculate_cyclomatic_complexity(node)
       complexity = 1 # Base complexity
@@ -166,11 +156,12 @@ module RailsCodeHealth
 
     def detect_god_classes
       classes = []
+      t = RailsCodeHealth.configuration.thresholds['smell_thresholds']
       find_nodes(@ast, :class) do |node|
         line_count = count_lines_in_node(node)
         method_count = count_methods_in_class(node)
-        
-        if line_count > 400 && method_count > 20
+
+        if line_count > t['god_class_lines'] && method_count > t['god_class_methods']
           classes << {
             type: :god_class,
             class_name: extract_class_name(node),
@@ -185,9 +176,10 @@ module RailsCodeHealth
 
     def detect_high_complexity_methods
       methods = []
+      threshold = RailsCodeHealth.configuration.thresholds['smell_thresholds']['high_complexity_method']
       find_nodes(@ast, :def) do |node|
         complexity = calculate_cyclomatic_complexity(node)
-        if complexity > 15
+        if complexity > threshold
           methods << {
             type: :high_complexity,
             method_name: node.children[0],
@@ -201,9 +193,10 @@ module RailsCodeHealth
 
     def detect_too_many_parameters
       methods = []
+      threshold = RailsCodeHealth.configuration.thresholds['smell_thresholds']['too_many_parameters']
       find_nodes(@ast, :def) do |node|
         param_count = count_parameters(node)
-        if param_count > 5
+        if param_count > threshold
           methods << {
             type: :too_many_parameters,
             method_name: node.children[0],
@@ -217,9 +210,10 @@ module RailsCodeHealth
 
     def detect_nested_conditionals
       methods = []
+      threshold = RailsCodeHealth.configuration.thresholds['smell_thresholds']['nested_conditionals']
       find_nodes(@ast, :def) do |node|
         max_depth = calculate_max_nesting_depth(node)
-        if max_depth > 4
+        if max_depth > threshold
           methods << {
             type: :nested_conditionals,
             method_name: node.children[0],
@@ -245,15 +239,16 @@ module RailsCodeHealth
     end
 
     def count_public_methods_in_class(class_node)
-      # This is a simplified version - in reality, you'd need to track visibility modifiers
-      count_methods_in_class(class_node)
+      defs_by_visibility(class_node)[:public].size
     end
+
+    PARAM_TYPES = %i[arg optarg restarg kwarg kwoptarg kwrestarg blockarg].freeze
 
     def count_parameters(method_node)
       args_node = method_node.children[1]
-      return 0 unless args_node
-      
-      args_node.children.count
+      return 0 unless args_node.is_a?(Parser::AST::Node)
+
+      args_node.children.count { |c| c.is_a?(Parser::AST::Node) && PARAM_TYPES.include?(c.type) }
     end
 
     def extract_class_name(class_node)
@@ -306,8 +301,10 @@ module RailsCodeHealth
       count
     end
 
+    NESTING_TYPES = %i[if case while until for].freeze
+
     def nesting_node?(node)
-      [:if, :case, :while, :until, :for, :begin, :block].include?(node.type)
+      NESTING_TYPES.include?(node.type)
     end
 
     def has_rescue_block?(node)

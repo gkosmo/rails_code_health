@@ -1,5 +1,7 @@
 # Rails Code Health
 
+[![CI](https://github.com/gkosmo/rails_code_health/actions/workflows/ci.yml/badge.svg)](https://github.com/gkosmo/rails_code_health/actions/workflows/ci.yml)
+
 A Ruby gem that evaluates the code health of Ruby on Rails applications, [inspired by CodeScene's research on technical debt and maintainability](https://arxiv.org/pdf/2203.04374
 ).
 
@@ -126,6 +128,8 @@ Health scores range from 1.0 (critical) to 10.0 (excellent) based on:
 - **🟡 Warning (4.0-7.9)**: Some issues, but generally acceptable
 - **🔴 Alert (1.0-3.9)**: Significant problems requiring attention
 - **⚫ Critical (<1.0)**: Severe issues, immediate action needed
+
+> **Note on v0.3.0 scores:** v0.3.0 fixes several false positives and false negatives in the Rails-specific checks. Scores on the same codebase will move compared to v0.2.0. See the CHANGELOG for the list of changed checks.
 
 ## Configuration
 

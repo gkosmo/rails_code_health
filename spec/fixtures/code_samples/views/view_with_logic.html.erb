@@ -1,0 +1,9 @@
+<% if signed_in? %>
+  <p>Hello, <%= current_user.name %></p>
+<% else %>
+  <p>Please sign in.</p>
+<% end %>
+
+<% @posts.each do |post| %>
+  <%= render post %>
+<% end %>

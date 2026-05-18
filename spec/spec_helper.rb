@@ -3,6 +3,8 @@ SimpleCov.start
 
 require_relative '../lib/rails_code_health'
 
+Dir[File.expand_path('support/**/*.rb', __dir__)].sort.each { |f| require f }
+
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|
     expectations.include_chain_clauses_in_custom_matcher_descriptions = true

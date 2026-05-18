@@ -125,13 +125,14 @@ RSpec.describe RailsCodeHealth::ReportGenerator do
     it 'shows context breakdown for new file types' do
       breakdown = generator.send(:generate_file_type_breakdown)
 
-      # Should show domain breakdown for service
-      expect(breakdown).to match(/Service:.*\n.*🏢 Domains: auth: 1/)
-      expect(breakdown).to match(/Service:.*\n.*🏠 Areas: api: 1/)
-      
+      # Should show domain breakdown for service (the marker may be several lines
+      # after the Service: header — e.g., the Organization line comes first).
+      expect(breakdown).to match(/Service:[\s\S]*?🏢 Domains: auth: 1/)
+      expect(breakdown).to match(/Service:[\s\S]*?🏠 Areas: api: 1/)
+
       # Should show domain and API version for interactor
-      expect(breakdown).to match(/Interactor:.*\n.*🏢 Domains: billing: 1/)
-      expect(breakdown).to match(/Interactor:.*\n.*🔢 API Versions: v2: 1/)
+      expect(breakdown).to match(/Interactor:[\s\S]*?🏢 Domains: billing: 1/)
+      expect(breakdown).to match(/Interactor:[\s\S]*?🔢 API Versions: v2: 1/)
     end
   end
 

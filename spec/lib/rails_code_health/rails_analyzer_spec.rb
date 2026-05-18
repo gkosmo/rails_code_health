@@ -9,7 +9,10 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
 
   describe 'controller analysis' do
     context 'with business logic detection' do
-      it 'detects complex conditionals' do
+      it 'does not flag compound authorization conditionals as business logic' do
+        # Under the stricter AST-scoped rules, a plain `if x && y` authorization
+        # check is NOT business logic. Only business-verb calls, transactions, or
+        # loops-with-conditionals are flagged.
         temp_file.write(<<~RUBY)
           class UsersController < ApplicationController
             def show
@@ -24,10 +27,7 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
         analyzer = described_class.new(file_path, :controller)
         result = analyzer.analyze
 
-        expect(result[:has_business_logic]).to be true
-        expect(result[:rails_smells]).to include(
-          hash_including(type: :business_logic_in_controller, severity: :high)
-        )
+        expect(result[:has_business_logic]).to be false
       end
 
       it 'detects iteration patterns' do
@@ -67,7 +67,10 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
         expect(result[:has_business_logic]).to be true
       end
 
-      it 'detects aggregation operations' do
+      it 'does not flag plain aggregation queries as business logic' do
+        # Under the stricter AST-scoped rules, AR aggregation calls (sum, count,
+        # average) are not business logic signals. Only business-verb calls,
+        # transactions, or loops-with-conditionals are flagged.
         temp_file.write(<<~RUBY)
           class ReportsController < ApplicationController
             def dashboard
@@ -82,7 +85,7 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
         analyzer = described_class.new(file_path, :controller)
         result = analyzer.analyze
 
-        expect(result[:has_business_logic]).to be true
+        expect(result[:has_business_logic]).to be false
       end
 
       it 'detects database transactions' do
@@ -134,6 +137,36 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
 
         expect(result[:has_business_logic]).to be false
       end
+    end
+  end
+
+  describe 'has_direct_model_access? (A1)' do
+    it 'flags model access inside a public action' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_direct_model_in_action.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:has_direct_model_access]).to be true
+    end
+
+    it 'does NOT flag model access only inside a private helper' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_model_in_private_helper.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:has_direct_model_access]).to be false
+    end
+  end
+
+  describe 'controller action counting (A3)' do
+    it 'counts all seven canonical RESTful actions in a thin controller' do
+      path = RailsCodeHealthFixtures.path_for('controllers/thin_restful_controller.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:action_count]).to eq(7)
+    end
+
+    it 'excludes private methods from the action count' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_private_helpers.rb')
+      result = described_class.new(path, :controller).analyze
+      # public: index, show, download = 3
+      # private: load_report, report_params (should NOT count)
+      expect(result[:action_count]).to eq(3)
     end
   end
 
@@ -402,8 +435,10 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       analyzer = described_class.new(file_path, :interactor)
       result = analyzer.analyze
 
-      # Organizer base (5) + context refs (1) + conditionals (1+1=2) + fail usage (1*2+1*2=4) = 12
-      expect(result[:complexity_score]).to eq(12)
+      # Organizer base (5) + context refs (4: context.user, context.user.valid?, context.fail!,
+      # context.success?) + conditionals (if + unless = 2) + fail usage (context_fail 1*2 +
+      # fail_bang 1*2 = 4) = 15.
+      expect(result[:complexity_score]).to eq(15)
     end
 
     it 'detects missing failure handling' do
@@ -438,7 +473,8 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       analyzer = described_class.new(file_path, :serializer)
       result = analyzer.analyze
 
-      expect(result[:attribute_count]).to eq(2)
+      # `attributes :id, :name, :email` counts each symbol (3); `attribute :full_name` adds 1.
+      expect(result[:attribute_count]).to eq(4)
     end
 
     it 'counts associations' do
@@ -561,6 +597,160 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       expect(result[:rails_smells]).to include(
         hash_including(type: :empty_serializer, severity: :low)
       )
+    end
+  end
+
+  describe 'has_business_logic? (A2)' do
+    it 'flags business-verb calls on model receivers' do
+      path = RailsCodeHealthFixtures.path_for('controllers/controller_with_business_logic.rb')
+      result = described_class.new(path, :controller).analyze
+      expect(result[:has_business_logic]).to be true
+    end
+
+    it 'does NOT flag a controller that only does compound authorization checks' do
+      # This used to trigger because the old regex matched `if x && y`.
+      source = <<~RUBY
+        class PostsController < ApplicationController
+          def show
+            if logged_in? && current_user.admin?
+              @post = Post.find(params[:id])
+            else
+              redirect_to root_path
+            end
+          end
+        end
+      RUBY
+      file = Tempfile.new(['ctrl', '.rb']).tap { |f| f.write(source); f.rewind }
+      result = described_class.new(Pathname.new(file.path), :controller).analyze
+      expect(result[:has_business_logic]).to be false
+    ensure
+      file&.close
+    end
+
+    it 'does NOT flag plain iteration without a conditional inside' do
+      source = <<~RUBY
+        class UsersController < ApplicationController
+          def index
+            @users = User.all
+            @users.each { |u| u.touch }
+          end
+        end
+      RUBY
+      file = Tempfile.new(['ctrl', '.rb']).tap { |f| f.write(source); f.rewind }
+      result = described_class.new(Pathname.new(file.path), :controller).analyze
+      expect(result[:has_business_logic]).to be false
+    ensure
+      file&.close
+    end
+
+    it 'does NOT flag controllers that only read AR attributes with process_ in the name' do
+      # Regression: `process_id` is a common attribute. Earlier impls flagged this.
+      source = <<~RUBY
+        class JobsController < ApplicationController
+          def show
+            @job_id = current_job.process_id
+            render json: { job_id: @job_id }
+          end
+        end
+      RUBY
+      file = Tempfile.new(['ctrl', '.rb']).tap { |f| f.write(source); f.rewind }
+      result = described_class.new(Pathname.new(file.path), :controller).analyze
+      expect(result[:has_business_logic]).to be false
+    ensure
+      file&.close
+    end
+  end
+
+  describe 'model macro counts (A4)' do
+    it 'does not count commented-out macros' do
+      path = RailsCodeHealthFixtures.path_for('models/model_with_validations_in_comments.rb')
+      result = described_class.new(path, :model).analyze
+      expect(result[:validation_count]).to eq(1)
+      expect(result[:association_count]).to eq(2) # belongs_to :user, has_many :comments
+    end
+
+    it 'counts macros only at the class body level' do
+      # `included do ... end` blocks live inside the class body but their contents
+      # are inside a block, so we don't descend into them.
+      path = RailsCodeHealthFixtures.path_for('models/model_with_concerns_block.rb')
+      result = described_class.new(path, :model).analyze
+      # Top-level: has_many :tags (1 association), validates :title (1 validation).
+      # The `included do` content is NOT counted.
+      expect(result[:association_count]).to eq(1)
+      expect(result[:validation_count]).to eq(1)
+    end
+  end
+
+  describe 'has_fat_model_smell? (A5)' do
+    it 'does not flag a thin model' do
+      path = RailsCodeHealthFixtures.path_for('models/thin_model.rb')
+      result = described_class.new(path, :model).analyze
+      expect(result[:has_fat_model_smell]).to be false
+    end
+
+    it 'flags a model that exceeds thresholds in class-scoped lines AND methods' do
+      path = RailsCodeHealthFixtures.path_for('models/fat_model.rb')
+      result = described_class.new(path, :model).analyze
+      expect(result[:has_fat_model_smell]).to be true
+    end
+  end
+
+  describe 'view logic counting (A7)' do
+    it 'counts ERB tags containing control flow as logic lines' do
+      path = RailsCodeHealthFixtures.path_for('views/view_with_logic.html.erb')
+      result = described_class.new(path, :view).analyze
+      # 4 tags contain control flow: if, else, end (twice in pairs), each ... + 2 ends
+      # Acceptable to assert "> 0 and >= 4" rather than exact, since semantics
+      # of "end" tags are debatable.
+      expect(result[:logic_lines]).to be >= 4
+    end
+
+    it 'does NOT count plain HTML lines with keywords in prose' do
+      path = RailsCodeHealthFixtures.path_for('views/view_with_keyword_in_text.html.erb')
+      result = described_class.new(path, :view).analyze
+      expect(result[:logic_lines]).to eq(0)
+    end
+
+    it 'returns zero logic for a plain view with only output ERB' do
+      path = RailsCodeHealthFixtures.path_for('views/simple_view.html.erb')
+      result = described_class.new(path, :view).analyze
+      # `<%= @user.name %>` is output-only, no control flow.
+      expect(result[:logic_lines]).to eq(0)
+    end
+  end
+
+  describe 'migration data changes (A6)' do
+    it 'does not flag a schema-only migration' do
+      path = RailsCodeHealthFixtures.path_for('migrations/schema_only_migration.rb')
+      result = described_class.new(path, :migration).analyze
+      expect(result[:has_data_changes]).to be false
+    end
+
+    it 'flags a migration that uses find_each + update_columns' do
+      path = RailsCodeHealthFixtures.path_for('migrations/migration_with_find_each.rb')
+      result = described_class.new(path, :migration).analyze
+      expect(result[:has_data_changes]).to be true
+    end
+
+    it 'flags a migration that runs raw SQL via connection.execute' do
+      path = RailsCodeHealthFixtures.path_for('migrations/migration_with_raw_sql.rb')
+      result = described_class.new(path, :migration).analyze
+      expect(result[:has_data_changes]).to be true
+    end
+  end
+
+  describe 'service dependency detection (A8)' do
+    it 'returns no dependencies for a trivial service' do
+      path = RailsCodeHealthFixtures.path_for('services/plain_service.rb')
+      result = described_class.new(path, :service).analyze
+      expect(result[:dependencies]).to eq([])
+    end
+
+    it 'does NOT mistake Profile. for File.' do
+      path = RailsCodeHealthFixtures.path_for('services/service_with_profile_model.rb')
+      result = described_class.new(path, :service).analyze
+      expect(result[:dependencies]).to include(:active_record)
+      expect(result[:dependencies]).not_to include(:file_system)
     end
   end
 end
