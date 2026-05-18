@@ -225,97 +225,101 @@ module RailsCodeHealth
 
     def calculate_service_penalties(service_data)
       penalties = []
-      
-      # Missing call method - critical for services
+
+      # Missing call method - critical for services. Use a flat (un-attenuated)
+      # penalty here because the `rails_conventions` weight (0.15) is sized for
+      # softer conventions; missing the core service contract is severe.
       unless service_data[:has_call_method]
-        penalties << 3.0 * @weights['rails_conventions']
+        penalties << 3.0
       end
-      
+
       # Too many dependencies
       dependency_count = service_data[:dependencies]&.count || 0
       service_thresholds = @thresholds['service_thresholds']['dependency_count']
       if dependency_count > service_thresholds['yellow']
-        severity = dependency_count > service_thresholds['red'] ? 2.0 : 1.0
-        penalties << severity * @weights['rails_conventions']
+        severity = dependency_count > service_thresholds['red'] ? 1.5 : 0.75
+        penalties << severity
       end
-      
+
       # High complexity
       complexity = service_data[:complexity_score] || 0
       complexity_thresholds = @thresholds['service_thresholds']['complexity_score']
       if complexity > complexity_thresholds['yellow']
         severity = complexity > complexity_thresholds['red'] ? 2.0 : 1.0
-        penalties << severity * @weights['rails_conventions']
+        penalties << severity
       end
-      
+
       # Missing error handling
       error_handling = service_data[:error_handling] || {}
       unless error_handling[:has_error_handling]
         penalties << 1.0 * @weights['rails_conventions']
       end
-      
+
       penalties
     end
 
     def calculate_interactor_penalties(interactor_data)
       penalties = []
-      
-      # Missing call method - critical for interactors
+
+      # Missing call method - critical for interactors (flat penalty; see
+      # service equivalent for rationale).
       unless interactor_data[:has_call_method]
-        penalties << 3.0 * @weights['rails_conventions']
+        penalties << 3.0
       end
-      
+
       # Complex organizers
       if interactor_data[:is_organizer]
         complexity = interactor_data[:complexity_score] || 0
         if complexity > 20  # Organizers should be simple orchestrators
-          penalties << 2.0 * @weights['rails_conventions']
+          penalties << 2.0
         end
       end
-      
+
       # Missing failure handling
       fail_usage = interactor_data[:fail_usage] || {}
       if (fail_usage[:context_fail] || 0) == 0 && (fail_usage[:fail_bang] || 0) == 0
         penalties << 1.5 * @weights['rails_conventions']
       end
-      
+
       # High complexity for regular interactors
       unless interactor_data[:is_organizer]
         complexity = interactor_data[:complexity_score] || 0
         if complexity > 15
-          penalties << 1.5 * @weights['rails_conventions']
+          penalties << 1.5
         end
       end
-      
+
       penalties
     end
 
     def calculate_serializer_penalties(serializer_data)
       penalties = []
-      
-      # Too many attributes/associations (fat serializer)
+
+      # Too many attributes/associations (fat serializer). Flat penalties because
+      # `rails_conventions` weight (0.15) drowned out the fat signal.
       attribute_count = serializer_data[:attribute_count] || 0
       association_count = serializer_data[:association_count] || 0
       total_fields = attribute_count + association_count
-      
+
       if total_fields > 20
-        penalties << 2.0 * @weights['rails_conventions']
+        penalties << 1.5
       elsif total_fields > 15
-        penalties << 1.0 * @weights['rails_conventions']
+        penalties << 0.5
       end
-      
+
       # Too many custom methods (complex logic)
       custom_method_count = serializer_data[:custom_method_count] || 0
       if custom_method_count > 10
-        penalties << 1.5 * @weights['rails_conventions']
+        penalties << 0.8
       elsif custom_method_count > 5
-        penalties << 0.5 * @weights['rails_conventions']
+        penalties << 0.4
       end
-      
+
       # Empty serializer (no value)
       if total_fields == 0 && custom_method_count == 0
         penalties << 1.0 * @weights['rails_conventions']
       end
-      
+
       penalties
     end
 
