@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-05-18
+
+### Fixed
+- Removed the canned "Focus on these improvement areas" block from the recommendations report. It was a static fortune-cookie message printed on every run regardless of the actual findings, making reports look templated. The "Most Common Issues (by frequency)" section above it already provides evidence-based, data-driven recommendations derived from real per-file findings.
+- The "🎯 Priority Actions:" header is now only emitted when there are actually critical files to act on (no more orphaned header).
+
 ## [0.3.2] - 2026-05-18
 
 ### Added
@@ -94,7 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reporting**: Detailed console output with health categories and JSON export
 - **CLI**: `rails-health` command with options for format, output file, and custom configuration
 
-[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/gkosmo/rails_code_health/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/gkosmo/rails_code_health/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/gkosmo/rails_code_health/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/gkosmo/rails_code_health/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/gkosmo/rails_code_health/compare/v0.2.0...v0.3.0
