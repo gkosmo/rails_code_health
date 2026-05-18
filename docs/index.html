@@ -622,14 +622,21 @@ $ rails-health --format json --output report.json</pre>
         <div class="quickstart-step">
           <div class="step-num">3</div>
           <div class="step-body">
-            <p><strong>(Optional) Use it programmatically</strong> in scripts or CI:</p>
-<pre class="code">require 'rails_code_health'
-
-report = RailsCodeHealth.analyze('.')
-
-RailsCodeHealth.configure do |config|
-  config.load_thresholds_from_file('custom_config.json')
-end</pre>
+            <p><strong>Gate your CI</strong> on code health. <code class="inline">--fail-under</code> exits non-zero if the average score drops; <code class="inline">--max-critical</code> exits non-zero if too many files fall into the Critical category:</p>
+<pre class="code">$ rails-health --fail-under 7.0 --max-critical 5</pre>
+            <p>Drop into a GitHub Actions workflow:</p>
+<pre class="code"><span style="color:#9ca3af">## .github/workflows/code-health.yml</span>
+name: Code Health
+on: [pull_request]
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: '3.3' }
+      - run: gem install rails_code_health
+      - run: rails-health --fail-under 7.0 --max-critical 5</pre>
           </div>
         </div>
 

@@ -13,7 +13,9 @@ module RailsCodeHealth
         format: :console,
         output: nil,
         config: nil,
-        verbose: false
+        verbose: false,
+        fail_under: nil,
+        max_critical: nil
       }
     end
 
@@ -33,12 +35,16 @@ module RailsCodeHealth
         puts "📊 Using format: #{@options[:format]}" if @options[:verbose]
 
         # Run the analysis
-        report = analyze_project
+        results = analyze_project
 
         # Output the report
-        output_report(report)
+        output_report(results)
 
         puts "\n✅ Analysis complete!" if @options[:verbose]
+
+        # Apply CI gating thresholds (after report is emitted so the user still sees output)
+        exit_code = gate_exit_code(results)
+        exit exit_code unless exit_code.zero?
 
       rescue RailsCodeHealth::Error => e
         puts "❌ Error: #{e.message}"
@@ -75,9 +81,19 @@ module RailsCodeHealth
           @options[:config] = file
         end
 
-        opts.on("-v", "--verbose", 
+        opts.on("-v", "--verbose",
                 "Verbose output") do
           @options[:verbose] = true
+        end
+
+        opts.on("--fail-under SCORE", Float,
+                "Exit non-zero if average health score is below SCORE (e.g. 7.0)") do |score|
+          @options[:fail_under] = score
+        end
+
+        opts.on("--max-critical N", Integer,
+                "Exit non-zero if more than N files fall into the Critical category") do |n|
+          @options[:max_critical] = n
         end
 
         opts.on_tail("-h", "--help", "Show this message") do
@@ -147,6 +163,34 @@ module RailsCodeHealth
       else
         puts json_report
       end
+    end
+
+    def gate_exit_code(results)
+      return 0 if results.nil? || results.empty?
+      return 0 if @options[:fail_under].nil? && @options[:max_critical].nil?
+
+      failures = []
+
+      if (threshold = @options[:fail_under])
+        average = results.sum { |r| r[:health_score] || 0 } / results.size.to_f
+        if average < threshold
+          failures << "average health score #{average.round(2)} is below --fail-under #{threshold}"
+        end
+      end
+
+      if (max = @options[:max_critical])
+        critical_count = results.count { |r| r[:health_category] == :critical }
+        if critical_count > max
+          failures << "#{critical_count} critical file(s) exceeds --max-critical #{max}"
+        end
+      end
+
+      return 0 if failures.empty?
+
+      warn ""
+      warn "❌ Health gate failed:"
+      failures.each { |msg| warn "   - #{msg}" }
+      2
     end
 
     def capture_console_output(report_generator)

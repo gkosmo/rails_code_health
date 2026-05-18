@@ -55,6 +55,43 @@ Use custom configuration:
 rails-health --config custom_thresholds.json
 ```
 
+### Continuous Integration
+
+Use `--fail-under` and/or `--max-critical` to gate CI builds on code health:
+
+```bash
+# Fail the build if the average health score drops below 7.0
+rails-health --fail-under 7.0
+
+# Fail the build if more than 5 files are in the Critical category
+rails-health --max-critical 5
+
+# Combine both — fail if either condition is violated
+rails-health --fail-under 7.0 --max-critical 5
+```
+
+Exit codes:
+- `0` — analysis succeeded and any configured gates passed
+- `1` — analysis itself failed (e.g. not a Rails project, parse error)
+- `2` — analysis succeeded but a `--fail-under` or `--max-critical` gate failed
+
+#### GitHub Actions example
+
+```yaml
+name: Code Health
+on: [pull_request]
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - run: gem install rails_code_health
+      - run: rails-health --fail-under 7.0 --max-critical 5
+```
+
 ### Programmatic Usage
 
 ```ruby
