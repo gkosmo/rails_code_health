@@ -27,9 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration `has_data_changes?` recognizes `find_each`, `update`, `update_columns`, `update_column`, `update!`, `update_all`, `delete_all`, `save`, `save!`, raw `connection.execute`, and `execute`.
 - Service `detect_service_dependencies` uses word boundaries — `Profile.` no longer matches the `File.` check.
 - God class, high complexity, parameter, and nesting smell thresholds are now read from configuration instead of inlined.
+- Service `detect_service_smells` now flags `:fat_service` at complexity ≥ 13 (was > 15, which left some genuinely-fat services unflagged).
+- Interactor `detect_fail_usage` no longer double-counts `context.fail!` as both `context_fail` and `fail_bang`.
+- Serializer `count_serializer_attributes` / `count_serializer_associations` now count each symbol (`attributes :a, :b, :c` = 3) instead of just one per declaration line.
+- `FileAnalyzer#find_view_files` dedupes overlapping glob matches so files under `app/views/` are no longer counted twice when matched by both `app/views/**/*.erb` and `app/**/views/**/*.erb`.
+- `HealthCalculator` service/interactor/serializer penalties now use flat (un-weighted) multipliers for the most severe issues (missing call method, fat service, complex organizer, fat serializer) — the global `rails_conventions` weight (0.15) was too small to make these matter.
 
 ### Changed (may affect scores)
 - Score changes are expected on any project where the above false positives or false negatives applied. Re-baseline before comparing to v0.2.0 reports.
+- Services missing a `call` method now score noticeably lower (penalty went from ~0.45 to 3.0); same for interactors. Fat serializers and complex organizers are also penalized more strongly.
 
 ## [0.2.0] - 2025-06-19
 

@@ -435,8 +435,10 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       analyzer = described_class.new(file_path, :interactor)
       result = analyzer.analyze
 
-      # Organizer base (5) + context refs (1) + conditionals (1+1=2) + fail usage (1*2+1*2=4) = 12
-      expect(result[:complexity_score]).to eq(12)
+      # Organizer base (5) + context refs (4: context.user, context.user.valid?, context.fail!,
+      # context.success?) + conditionals (if + unless = 2) + fail usage (context_fail 1*2 +
+      # fail_bang 1*2 = 4) = 15.
+      expect(result[:complexity_score]).to eq(15)
     end
 
     it 'detects missing failure handling' do
@@ -471,7 +473,8 @@ RSpec.describe RailsCodeHealth::RailsAnalyzer do
       analyzer = described_class.new(file_path, :serializer)
       result = analyzer.analyze
 
-      expect(result[:attribute_count]).to eq(2)
+      # `attributes :id, :name, :email` counts each symbol (3); `attribute :full_name` adds 1.
+      expect(result[:attribute_count]).to eq(4)
     end
 
     it 'counts associations' do
