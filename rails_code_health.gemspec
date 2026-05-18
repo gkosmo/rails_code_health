@@ -1,6 +1,8 @@
+require_relative 'lib/rails_code_health/version'
+
 Gem::Specification.new do |spec|
   spec.name          = 'rails_code_health'
-  spec.version       = '0.2.0'
+  spec.version       = RailsCodeHealth::VERSION
   spec.authors       = ['George Kosmopoulos']
   spec.email         = ['gkosmo1@hotmail.com']
 
