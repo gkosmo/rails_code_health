@@ -226,14 +226,13 @@ module RailsCodeHealth
         recommendations << "#{index + 1}. #{rec} (#{count} occurrence#{'s' if count > 1})"
       end
       
-      recommendations << ""
-      recommendations << "🎯 Priority Actions:"
-      recommendations << ""
-      
       # Find files with lowest scores and their recommendations
       critical_files = @results.select { |r| r[:health_score] && r[:health_score] < 4.0 }
       if critical_files.any?
-        recommendations << "1. 🚨 Address critical files immediately:"
+        recommendations << ""
+        recommendations << "🎯 Priority Actions:"
+        recommendations << ""
+        recommendations << "🚨 Address critical files immediately:"
         critical_files.first(3).each do |file|
           recommendations << "   - #{file[:relative_path]} (score: #{file[:health_score]})"
           if file[:recommendations] && file[:recommendations].any?
@@ -242,15 +241,8 @@ module RailsCodeHealth
             end
           end
         end
-        recommendations << ""
       end
-      
-      recommendations << "2. 🔧 Focus on these improvement areas:"
-      recommendations << "   - Reduce method and class lengths"
-      recommendations << "   - Lower cyclomatic complexity"
-      recommendations << "   - Follow Rails conventions"
-      recommendations << "   - Extract business logic from controllers and views"
-      
+
       recommendations.join("\n")
     end
 
