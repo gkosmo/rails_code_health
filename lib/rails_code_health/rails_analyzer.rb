@@ -1,5 +1,7 @@
 module RailsCodeHealth
   class RailsAnalyzer
+    include RailsCodeHealth::ASTHelpers
+
     def initialize(file_path, file_type)
       @file_path = file_path
       @file_type = file_type
@@ -104,11 +106,10 @@ module RailsCodeHealth
       return 0 unless @ast
 
       action_count = 0
-      find_nodes(@ast, :def) do |node|
-        method_name = node.children[0].to_s
-        # Skip private methods and Rails internal methods
-        unless method_name.start_with?('_') || private_controller_method?(method_name)
-          action_count += 1
+      find_nodes(@ast, :class) do |class_node|
+        defs_by_visibility(class_node)[:public].each do |def_node|
+          name = def_node.children[0].to_s
+          action_count += 1 unless name.start_with?('_')
         end
       end
       action_count
@@ -122,17 +123,25 @@ module RailsCodeHealth
       @source.include?('params.require') || @source.include?('params.permit')
     end
 
+    DIRECT_MODEL_METHODS = %i[find find_by where create create! update update! all first last destroy_all].freeze
+
     def has_direct_model_access?
-      # Look for direct ActiveRecord calls in controller actions
-      model_patterns = [
-        /\w+\.find\(/,
-        /\w+\.where\(/,
-        /\w+\.create\(/,
-        /\w+\.update\(/,
-        /\w+\.all/
-      ]
-      
-      model_patterns.any? { |pattern| @source.match?(pattern) }
+      return false unless @ast
+
+      found = false
+      find_nodes(@ast, :class) do |class_node|
+        defs_by_visibility(class_node)[:public].each do |def_node|
+          find_nodes(def_node, :send) do |send_node|
+            receiver = send_node.children[0]
+            method_name = send_node.children[1]
+            # Receiver must be a constant (a likely model class) and the method must be an AR method.
+            next unless receiver.is_a?(Parser::AST::Node) && receiver.type == :const
+            next unless DIRECT_MODEL_METHODS.include?(method_name)
+            found = true
+          end
+        end
+      end
+      found
     end
 
     def detect_response_formats
@@ -144,16 +153,22 @@ module RailsCodeHealth
       formats
     end
 
+    BUSINESS_VERBS = %i[calculate compute process charge refund transition].freeze
+    # Methods with these prefixes likely indicate business logic.
+    # `process_` was previously included but removed because of false positives
+    # on common AR attributes like `process_id`.
+    BUSINESS_VERB_PREFIXES = %w[calculate_ compute_].freeze
+
     def has_business_logic?
-      business_logic_patterns = [
-        /if.*&&.*/, # Complex conditionals
-        /\.each\s*do/, # Iteration
-        /\b(calculate|compute|process)\b/, # Business operations
-        /\.(sum|count|average)\b/, # Aggregations
-        /transaction\s*do/ # Database transactions
-      ]
-      
-      business_logic_patterns.any? { |pattern| @source.match?(pattern) }
+      return false unless @ast
+
+      found = false
+      find_nodes(@ast, :class) do |class_node|
+        defs_by_visibility(class_node)[:public].each do |def_node|
+          found = true if action_has_business_logic?(def_node)
+        end
+      end
+      found
     end
 
     def detect_controller_smells
@@ -192,52 +207,115 @@ module RailsCodeHealth
       smells
     end
 
+    def action_has_business_logic?(def_node)
+      # NOTE: arithmetic signal (plan A2 item 2) intentionally not implemented —
+      # accuracy of detecting "two non-literal operands" was deemed not worth
+      # the false positive risk in v0.3.0.
+      return true if business_verb_call?(def_node)
+      return true if transaction_block?(def_node)
+      return true if loop_with_conditional?(def_node)
+      false
+    end
+
+    def business_verb_call?(def_node)
+      found = false
+      find_nodes(def_node, :send) do |send_node|
+        method_name = send_node.children[1].to_s
+        if BUSINESS_VERBS.include?(method_name.to_sym) ||
+           BUSINESS_VERB_PREFIXES.any? { |p| method_name.start_with?(p) }
+          found = true
+        end
+      end
+      found
+    end
+
+    def transaction_block?(def_node)
+      found = false
+      find_nodes(def_node, :block) do |block_node|
+        send_node = block_node.children[0]
+        next unless send_node.is_a?(Parser::AST::Node) && send_node.type == :send
+        found = true if send_node.children[1] == :transaction
+      end
+      found
+    end
+
+    def loop_with_conditional?(def_node)
+      found = false
+      find_nodes(def_node, :block) do |block_node|
+        send_node = block_node.children[0]
+        next unless send_node.is_a?(Parser::AST::Node) && send_node.type == :send
+        next unless %i[each map select reject].include?(send_node.children[1])
+        # Look for conditionals inside the block body.
+        find_nodes(block_node.children[2], :if) { found = true }
+        find_nodes(block_node.children[2], :case) { found = true }
+      end
+      found
+    end
+
+    ASSOCIATION_MACROS = %i[belongs_to has_one has_many has_and_belongs_to_many].freeze
+    VALIDATION_MACROS = %i[validates validates_presence_of validates_uniqueness_of validates_format_of validates_length_of validates_numericality_of validates_inclusion_of validates_exclusion_of validates_acceptance_of validates_confirmation_of].freeze
+    CALLBACK_MACROS = %i[before_save after_save before_create after_create before_update after_update before_destroy after_destroy after_commit after_rollback before_validation after_validation].freeze
+
     # Model analysis methods
     def count_associations
-      associations = 0
-      association_methods = %w[belongs_to has_one has_many has_and_belongs_to_many]
-      
-      association_methods.each do |method|
-        associations += @source.scan(/#{method}\s+:/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        ASSOCIATION_MACROS.each do |macro|
+          total += class_body_sends(class_node, macro).size
+        end
       end
-      
-      associations
+      total
     end
 
     def count_validations
-      validations = 0
-      validation_methods = %w[validates validates_presence_of validates_uniqueness_of validates_format_of]
-      
-      validation_methods.each do |method|
-        validations += @source.scan(/#{method}\s+/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        VALIDATION_MACROS.each do |macro|
+          total += class_body_sends(class_node, macro).size
+        end
       end
-      
-      validations
+      total
     end
 
     def count_callbacks
-      callbacks = 0
-      callback_methods = %w[before_save after_save before_create after_create before_update after_update before_destroy after_destroy]
-      
-      callback_methods.each do |method|
-        callbacks += @source.scan(/#{method}\s+/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        CALLBACK_MACROS.each do |macro|
+          total += class_body_sends(class_node, macro).size
+        end
       end
-      
-      callbacks
+      total
     end
 
     def count_scopes
-      @source.scan(/scope\s+:/).count
+      total = 0
+      find_nodes(@ast, :class) do |class_node|
+        total += class_body_sends(class_node, :scope).size
+      end
+      total
     end
 
     def has_fat_model_smell?
       return false unless @ast
 
-      line_count = @source.lines.count
+      class_node = nil
+      find_nodes(@ast, :class) { |n| class_node ||= n }
+      return false unless class_node
+
+      code_lines = code_line_count(class_node)
       method_count = 0
-      find_nodes(@ast, :def) { method_count += 1 }
-      
-      line_count > 200 && method_count > 15
+      find_nodes_in_scope(class_node, :def) { method_count += 1 }
+
+      code_lines > 200 && method_count > 15
+    end
+
+    def code_line_count(node)
+      return 0 unless node.respond_to?(:loc) && node.loc.respond_to?(:expression)
+      expr = node.loc.expression
+      return 0 unless expr
+
+      lines = expr.source.lines
+      lines.count { |line| line.strip != '' && !line.strip.start_with?('#') }
     end
 
     def detect_model_smells
@@ -270,16 +348,16 @@ module RailsCodeHealth
       smells
     end
 
+    VIEW_CONTROL_FLOW_KEYWORDS = %w[if unless elsif else case for while end].freeze
+
     # View analysis methods
-    def count_view_logic_lines(lines)
-      logic_count = 0
-      
-      lines.each do |line|
-        # Count Ruby code blocks in ERB
-        logic_count += 1 if line.match?(/<%((?!%>).)*%>/) || line.match?(/<%((?!%>).)*if|unless|case|for|while/)
+    def count_view_logic_lines(_lines)
+      count = 0
+      erb_ruby_fragments(@source).each do |ruby|
+        tokens = ruby.scan(/\b\w+\b/)
+        count += 1 if (tokens & VIEW_CONTROL_FLOW_KEYWORDS).any?
       end
-      
-      logic_count
+      count
     end
 
     def has_inline_styles?
@@ -350,10 +428,22 @@ module RailsCodeHealth
       smells
     end
 
+    DATA_CHANGE_METHODS = %i[
+      execute update_all delete_all
+      find_each update update_columns update_column
+      update! save save!
+    ].freeze
+
     # Migration analysis methods
     def has_data_changes?
-      data_methods = %w[execute update_all delete_all]
-      data_methods.any? { |method| @source.include?(method) }
+      return false unless @ast
+
+      found = false
+      find_nodes(@ast, :send) do |send_node|
+        method_name = send_node.children[1]
+        found = true if DATA_CHANGE_METHODS.include?(method_name)
+      end
+      found
     end
 
     def has_index_changes?
@@ -432,34 +522,29 @@ module RailsCodeHealth
     end
 
     def detect_service_dependencies
-      dependencies = []
-      
-      # ActiveRecord usage
-      if @source.match?(/\w+\.find\(/) || @source.match?(/\w+\.where\(/) || @source.match?(/\w+\.create\(/)
-        dependencies << :active_record
+      deps = []
+
+      if @source.match?(/\b(?:[A-Z]\w*)\.(?:find|find_by|where|create|create!|update|update!|all|first|last)\b/)
+        deps << :active_record
       end
-      
-      # External APIs
-      if @source.include?('Net::HTTP') || @source.include?('HTTParty') || @source.include?('Faraday')
-        dependencies << :external_api
+
+      if @source.match?(/\b(?:Net::HTTP|HTTParty|Faraday|RestClient|Typhoeus)\b/)
+        deps << :external_api
       end
-      
-      # File system
-      if @source.include?('File.') || @source.include?('Dir.') || @source.include?('FileUtils')
-        dependencies << :file_system
+
+      if @source.match?(/\b(?:File|Dir|FileUtils|Pathname)\.\w+/)
+        deps << :file_system
       end
-      
-      # Email
-      if @source.include?('Mailer') || @source.include?('deliver') || @source.include?('ActionMailer')
-        dependencies << :email
+
+      if @source.match?(/\b(?:Mailer|ActionMailer)\b/) || @source.match?(/\.deliver(?:_now|_later)?\b/)
+        deps << :email
       end
-      
-      # Cache
-      if @source.include?('Rails.cache') || @source.include?('cache_store') || @source.include?('Redis')
-        dependencies << :cache
+
+      if @source.match?(/\bRails\.cache\b/) || @source.match?(/\bRedis\b/) || @source.match?(/\bcache_store\b/)
+        deps << :cache
       end
-      
-      dependencies.uniq
+
+      deps.uniq
     end
 
     def detect_error_handling
@@ -502,7 +587,7 @@ module RailsCodeHealth
       end
       
       complexity = calculate_service_complexity
-      if complexity > 15
+      if complexity >= 13
         smells << {
           type: :fat_service,
           complexity: complexity,
@@ -546,7 +631,8 @@ module RailsCodeHealth
     def detect_fail_usage
       {
         context_fail: @source.scan(/context\.fail/).count,
-        fail_bang: @source.scan(/fail!/).count
+        # `fail!` only — NOT `context.fail!` (that's counted as context_fail).
+        fail_bang: @source.scan(/(?<!\.)\bfail!/).count
       }
     end
 
@@ -624,19 +710,23 @@ module RailsCodeHealth
     end
 
     def count_serializer_attributes
-      # Count attributes declarations (lines starting with attributes/attribute)
-      @source.scan(/^\s*attributes?\s+/).count + @source.scan(/^\s*attribute\s+/).count
+      # Count each symbol passed to attributes/attribute calls.
+      # `attributes :id, :name, :email` counts as 3; `attribute :full_name` as 1.
+      count = 0
+      @source.scan(/^\s*attributes?\s+(.+)$/).each do |(args)|
+        count += args.scan(/:\w+/).size
+      end
+      count
     end
 
     def count_serializer_associations
-      associations = 0
-      association_methods = %w[has_one has_many belongs_to]
-      
-      association_methods.each do |method|
-        associations += @source.scan(/^\s*#{method}\s+/).count
+      count = 0
+      %w[has_one has_many belongs_to].each do |method|
+        @source.scan(/^\s*#{method}\s+(.+)$/).each do |(args)|
+          count += args.scan(/:\w+/).size
+        end
       end
-      
-      associations
+      count
     end
 
     def count_custom_serializer_methods
@@ -693,20 +783,5 @@ module RailsCodeHealth
       smells
     end
 
-    # Helper methods
-    def find_nodes(node, type, &block)
-      return unless node.is_a?(Parser::AST::Node)
-
-      yield(node) if node.type == type
-
-      node.children.each do |child|
-        find_nodes(child, type, &block)
-      end
-    end
-
-    def private_controller_method?(method_name)
-      %w[show new edit create update destroy].include?(method_name) ||
-        method_name.end_with?('_params')
-    end
   end
 end

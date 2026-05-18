@@ -91,7 +91,9 @@ module RailsCodeHealth
         files.concat(Dir.glob(pattern))
       end
 
-      files.map { |f| Pathname.new(f) }
+      # Patterns overlap (`app/views/**/*.erb` and `app/**/views/**/*.erb` both
+      # match files under `app/views/...`); dedupe by absolute path.
+      files.uniq.map { |f| Pathname.new(f) }
     end
 
     def should_skip_file?(relative_path)

@@ -126,4 +126,25 @@ RSpec.describe RailsCodeHealth::Configuration do
       expect(service_thresholds['complexity_score']['red']).to eq(25)
     end
   end
+
+  describe 'smell detection thresholds' do
+    let(:thresholds) { RailsCodeHealth::Configuration.new.thresholds }
+
+    it 'exposes god_class line and method thresholds' do
+      expect(thresholds.dig('smell_thresholds', 'god_class_lines')).to eq(400)
+      expect(thresholds.dig('smell_thresholds', 'god_class_methods')).to eq(20)
+    end
+
+    it 'exposes high_complexity_method threshold' do
+      expect(thresholds.dig('smell_thresholds', 'high_complexity_method')).to eq(15)
+    end
+
+    it 'exposes too_many_parameters threshold' do
+      expect(thresholds.dig('smell_thresholds', 'too_many_parameters')).to eq(5)
+    end
+
+    it 'exposes nested_conditionals threshold' do
+      expect(thresholds.dig('smell_thresholds', 'nested_conditionals')).to eq(4)
+    end
+  end
 end
