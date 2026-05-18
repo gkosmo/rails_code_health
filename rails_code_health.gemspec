@@ -13,7 +13,7 @@ Gem::Specification.new do |spec|
 
   spec.required_ruby_version = '>= 3.0.0'
 
-  spec.files = Dir['lib/**/*', 'config/**/*', 'README.md', 'LICENSE.txt', 'CHANGELOG.md']
+  spec.files = Dir['lib/**/*', 'README.md', 'LICENSE.txt', 'CHANGELOG.md']
   spec.require_paths = ['lib']
 
   # Core dependencies

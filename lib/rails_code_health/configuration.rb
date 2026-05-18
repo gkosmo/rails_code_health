@@ -23,13 +23,7 @@ module RailsCodeHealth
     private
 
     def load_default_thresholds
-      config_file = File.join(File.dirname(__FILE__), '..', '..', 'config', 'thresholds.json')
-      if File.exist?(config_file)
-        JSON.parse(File.read(config_file))
-      else
-        # Fallback to hardcoded defaults if config file is missing
-        default_hardcoded_thresholds
-      end
+      default_hardcoded_thresholds
     end
 
     def default_excluded_paths
