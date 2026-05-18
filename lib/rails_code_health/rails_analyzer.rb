@@ -587,7 +587,7 @@ module RailsCodeHealth
       end
       
       complexity = calculate_service_complexity
-      if complexity > 15
+      if complexity >= 13
         smells << {
           type: :fat_service,
           complexity: complexity,
@@ -631,7 +631,8 @@ module RailsCodeHealth
     def detect_fail_usage
       {
         context_fail: @source.scan(/context\.fail/).count,
-        fail_bang: @source.scan(/fail!/).count
+        # `fail!` only — NOT `context.fail!` (that's counted as context_fail).
+        fail_bang: @source.scan(/(?<!\.)\bfail!/).count
       }
     end
 
@@ -709,19 +710,23 @@ module RailsCodeHealth
     end
 
     def count_serializer_attributes
-      # Count attributes declarations (lines starting with attributes/attribute)
-      @source.scan(/^\s*attributes?\s+/).count + @source.scan(/^\s*attribute\s+/).count
+      # Count each symbol passed to attributes/attribute calls.
+      # `attributes :id, :name, :email` counts as 3; `attribute :full_name` as 1.
+      count = 0
+      @source.scan(/^\s*attributes?\s+(.+)$/).each do |(args)|
+        count += args.scan(/:\w+/).size
+      end
+      count
     end
 
     def count_serializer_associations
-      associations = 0
-      association_methods = %w[has_one has_many belongs_to]
-      
-      association_methods.each do |method|
-        associations += @source.scan(/^\s*#{method}\s+/).count
+      count = 0
+      %w[has_one has_many belongs_to].each do |method|
+        @source.scan(/^\s*#{method}\s+(.+)$/).each do |(args)|
+          count += args.scan(/:\w+/).size
+        end
       end
-      
-      associations
+      count
     end
 
     def count_custom_serializer_methods
