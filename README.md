@@ -1,5 +1,7 @@
 # Rails Code Health
 
+[![CI](https://github.com/gkosmo/rails_code_health/actions/workflows/ci.yml/badge.svg)](https://github.com/gkosmo/rails_code_health/actions/workflows/ci.yml)
+
 A Ruby gem that evaluates the code health of Ruby on Rails applications, [inspired by CodeScene's research on technical debt and maintainability](https://arxiv.org/pdf/2203.04374
 ).
 
