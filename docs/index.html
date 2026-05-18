@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rails Code Health — code health analysis for Rails apps</title>
+  <meta name="description" content="A Ruby gem that scores the health of every file in a Rails codebase. Surfaces hotspots, fat models, complex migrations, and view logic — inspired by CodeScene research." />
+  <meta property="og:title" content="Rails Code Health" />
+  <meta property="og:description" content="Score the health of every file in your Rails app. Find hotspots before they find you." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9D%A4%3C/text%3E%3C/svg%3E" />
+
+  <style>
+    :root {
+      --bg: #fbfaf7;
+      --bg-elev: #ffffff;
+      --ink: #1a1a1a;
+      --ink-soft: #4a4a4a;
+      --ink-mute: #777777;
+      --line: #e6e3dc;
+      --line-strong: #d1cdc3;
+      --accent: #b91c1c;        /* deep red — "health" / Rails-flavored */
+      --accent-soft: #fbeaea;
+      --code-bg: #1d1f21;
+      --code-ink: #e6e3dc;
+      --green: #16a34a;
+      --yellow: #d97706;
+      --red: #dc2626;
+      --black: #1a1a1a;
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --radius: 6px;
+      --maxw: 880px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14130f;
+        --bg-elev: #1c1b17;
+        --ink: #ecebe6;
+        --ink-soft: #b8b5ad;
+        --ink-mute: #8a877f;
+        --line: #2a2925;
+        --line-strong: #3a3833;
+        --accent: #ef4444;
+        --accent-soft: #2a1818;
+        --code-bg: #0f0e0c;
+        --code-ink: #d8d5cd;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code, pre, kbd, samp {
+      font-family: var(--mono);
+      font-size: 0.92em;
+    }
+
+    /* Layout */
+    .wrap {
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Top bar */
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: saturate(180%) blur(8px);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      max-width: var(--maxw);
+      margin: 0 auto;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .brand-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .topbar-links {
+      display: flex; gap: 20px; align-items: center;
+      font-family: var(--mono);
+      font-size: 14px;
+    }
+    .topbar-links a { color: var(--ink-soft); }
+    .topbar-links a:hover { color: var(--ink); text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0 56px;
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: clamp(34px, 5vw, 52px);
+      line-height: 1.08;
+      letter-spacing: -0.025em;
+      margin: 0 0 20px;
+      font-weight: 700;
+    }
+    h1 .accent { color: var(--accent); }
+    .lede {
+      font-size: 20px;
+      line-height: 1.5;
+      color: var(--ink-soft);
+      max-width: 640px;
+      margin: 0 0 36px;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .install-block {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 14px;
+    }
+    .install-block .prompt { color: #6ee7b7; user-select: none; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 14px;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-elev);
+      color: var(--ink);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .btn:hover { border-color: var(--ink); text-decoration: none; }
+    .btn-primary {
+      background: var(--ink);
+      color: var(--bg);
+      border-color: var(--ink);
+    }
+    .btn-primary:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* Sections */
+    section {
+      padding: 64px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    section:last-of-type { border-bottom: 0; }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-size: 32px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin: 0 0 16px;
+      font-weight: 700;
+    }
+    h3 {
+      font-size: 18px;
+      line-height: 1.35;
+      margin: 0 0 8px;
+      font-weight: 600;
+    }
+    p { margin: 0 0 16px; color: var(--ink-soft); }
+    p strong { color: var(--ink); font-weight: 600; }
+
+    /* Categories grid */
+    .cats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 28px;
+    }
+    .cat {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      background: var(--bg-elev);
+    }
+    .cat-dot {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .cat-dot.green  { background: var(--green); }
+    .cat-dot.yellow { background: var(--yellow); }
+    .cat-dot.red    { background: var(--red); }
+    .cat-dot.black  { background: var(--black); }
+    .cat-name {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .cat-range {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-mute);
+      margin-top: 4px;
+      margin-bottom: 10px;
+    }
+    .cat-desc {
+      font-size: 14px;
+      color: var(--ink-soft);
+      line-height: 1.5;
+    }
+
+    /* Terminal sample */
+    .terminal {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 28px;
+      border: 1px solid #000;
+      box-shadow: 0 10px 30px -10px rgba(0,0,0,0.25);
+    }
+    .terminal-bar {
+      display: flex; gap: 6px;
+      padding: 10px 14px;
+      background: #2a2c2f;
+      border-bottom: 1px solid #000;
+    }
+    .terminal-bar span {
+      width: 11px; height: 11px; border-radius: 50%;
+      display: inline-block;
+    }
+    .tdot-r { background: #ff5f57; }
+    .tdot-y { background: #febc2e; }
+    .tdot-g { background: #28c840; }
+    .terminal-body {
+      padding: 18px 20px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .terminal-body .cmd     { color: #6ee7b7; }
+    .terminal-body .dim     { color: #8a877f; }
+    .terminal-body .ok      { color: #4ade80; }
+    .terminal-body .warn    { color: #fbbf24; }
+    .terminal-body .bad     { color: #f87171; }
+    .terminal-body .crit    { color: #a1a1aa; }
+    .terminal-body .head    { color: #e6e3dc; font-weight: 600; }
+    .terminal-body .label   { color: #c4b5fd; }
+
+    /* Checks list */
+    .checks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px 32px;
+      margin-top: 28px;
+    }
+    @media (max-width: 640px) { .checks { grid-template-columns: 1fr; } }
+    .checks h3 {
+      font-family: var(--mono);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink-mute);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    .checks ul { margin: 0; padding: 0; list-style: none; }
+    .checks li {
+      padding: 6px 0;
+      color: var(--ink-soft);
+      font-size: 15px;
+      display: flex;
+      gap: 10px;
+    }
+    .checks li::before {
+      content: "›";
+      color: var(--accent);
+      font-family: var(--mono);
+      flex-shrink: 0;
+    }
+
+    /* Code blocks */
+    pre.code {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 16px 18px;
+      border-radius: var(--radius);
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 16px 0;
+    }
+    code.inline {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    @media (prefers-color-scheme: dark) {
+      code.inline { background: #2a1818; }
+    }
+
+    /* Quickstart */
+    .quickstart-step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: var(--bg);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      display: grid;
+      place-items: center;
+    }
+    .step-body { flex: 1; min-width: 0; }
+    .step-body p { margin: 0 0 8px; }
+    .step-body pre.code { margin: 8px 0 0; }
+
+    /* Footer */
+    footer {
+      padding: 40px 0 60px;
+      color: var(--ink-mute);
+      font-size: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-family: var(--mono);
+    }
+    .footer-links a { color: var(--ink-mute); margin-left: 18px; }
+    .footer-links a:first-child { margin-left: 0; }
+    .footer-links a:hover { color: var(--ink); }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="#top" class="brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        rails_code_health
+      </a>
+      <nav class="topbar-links">
+        <a href="#why">Why</a>
+        <a href="#how">How</a>
+        <a href="#sample">Output</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/gkosmo/rails_code_health" rel="noopener">GitHub →</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="wrap">
+        <div class="eyebrow">A Ruby gem for Rails developers</div>
+        <h1>Score the health of every file in your <span class="accent">Rails</span> app.</h1>
+        <p class="lede">
+          Rails Code Health analyzes your codebase and assigns each file a 1–10 health score
+          based on complexity, maintainability, and Rails conventions. Surface hotspots
+          before they surface you.
+        </p>
+
+        <div class="cta-row">
+          <div class="install-block" aria-label="Install command">
+            <span class="prompt">$</span><span>gem install rails_code_health</span>
+          </div>
+          <a class="btn btn-primary" href="#install">Get started →</a>
+          <a class="btn" href="https://github.com/gkosmo/rails_code_health" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why -->
+    <section id="why">
+      <div class="wrap">
+        <div class="section-label">Why this exists</div>
+        <h2>Tech debt is invisible until it isn't.</h2>
+        <p>
+          Rails codebases accumulate hotspots quietly — a fat model here, a controller with too
+          many actions there, a migration that quietly changes production data. By the time
+          these problems hurt, they've been hurting for a while.
+        </p>
+        <p>
+          Rails Code Health was inspired by
+          <a href="https://arxiv.org/pdf/2203.04374" rel="noopener">CodeScene's research on
+          code health and maintainability</a> — research showing that a small number of files
+          tend to drive a disproportionate share of defects and slowdowns. This gem brings
+          that lens to Rails specifically: it understands controllers, models, views, helpers,
+          and migrations as first-class concepts, not just as Ruby files.
+        </p>
+        <p>
+          The output isn't a vague grade. It's a per-file score, a category, and concrete
+          recommendations — the kind of thing you can bring to a sprint planning meeting.
+        </p>
+      </div>
+    </section>
+
+    <!-- How -->
+    <section id="how">
+      <div class="wrap">
+        <div class="section-label">How it works</div>
+        <h2>One score per file. Four clear categories.</h2>
+        <p>
+          Each file gets analyzed for Ruby-level concerns (method length, cyclomatic
+          complexity, nesting depth) and Rails-specific concerns (action count, callback
+          complexity, view logic, migration risk). The signals combine into a 1–10 score
+          and one of four categories:
+        </p>
+
+        <div class="cats">
+          <div class="cat">
+            <div><span class="cat-dot green"></span><span class="cat-name">Healthy</span></div>
+            <div class="cat-range">score 8.0 – 10.0</div>
+            <div class="cat-desc">Clean, conventional, low-risk. Keep doing what you're doing.</div>
+          </div>
+          <div class="cat">
+            <div><span class="cat-dot yellow"></span><span class="cat-name">Warning</span></div>
+            <div class="cat-range">score 6.0 – 7.9</div>
+            <div class="cat-desc">Drifting. Worth a closer look on the next pass through this file.</div>
+          </div>
+          <div class="cat">
+            <div><span class="cat-dot red"></span><span class="cat-name">Alert</span></div>
+            <div class="cat-range">score 4.0 – 5.9</div>
+            <div class="cat-desc">Pay attention. Likely concentrating risk and slowing the team down.</div>
+          </div>
+          <div class="cat">
+            <div><span class="cat-dot black"></span><span class="cat-name">Critical</span></div>
+            <div class="cat-range">score 1.0 – 3.9</div>
+            <div class="cat-desc">Prioritize. These are the files everyone is afraid to touch.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sample output -->
+    <section id="sample">
+      <div class="wrap">
+        <div class="section-label">What you see</div>
+        <h2>A real report, not a vibes check.</h2>
+        <p>
+          Run <code class="inline">rails-health</code> in your project. You get a summary,
+          a breakdown by file type, a list of files that need attention, and a showcase of
+          top performers — with file paths, scores, and specific reasons:
+        </p>
+
+        <div class="terminal" role="img" aria-label="Sample CLI output from rails-health">
+          <div class="terminal-bar">
+            <span class="tdot-r"></span><span class="tdot-y"></span><span class="tdot-g"></span>
+          </div>
+          <div class="terminal-body"><span class="cmd">$ rails-health</span>
+
+<span class="head">📊 Rails Code Health Report</span>
+<span class="dim">══════════════════════════════════════════════════</span>
+Project: my-rails-app          Files analyzed: 487
+Average score: <span class="warn">6.4 / 10</span>      Overall: <span class="warn">Warning</span>
+
+<span class="head">Health Distribution</span>
+  <span class="ok">🟢 Healthy</span>   312 files  (64%)
+  <span class="warn">🟡 Warning</span>   118 files  (24%)
+  <span class="bad">🔴 Alert</span>      43 files  ( 9%)
+  <span class="crit">⚫ Critical</span>   14 files  ( 3%)
+
+<span class="head">🚨 Files Needing Most Attention</span>
+
+1. <span class="crit">⚫</span> app/models/user.rb
+   Score: <span class="bad">2.4 / 10</span>  Type: <span class="label">model</span>  712 lines
+   • 24 associations, 17 callbacks, 6 nested validations
+   • 3 methods exceed 40 lines; max cyclomatic complexity 22
+   → Split responsibilities; extract callback logic into services
+
+2. <span class="crit">⚫</span> app/controllers/orders_controller.rb
+   Score: <span class="bad">3.1 / 10</span>  Type: <span class="label">controller</span>  21 actions
+   • Direct model access detected in 8 actions
+   • Missing strong parameters on 3 endpoints
+   → Reduce action count; route non-RESTful actions to dedicated controllers
+
+<span class="head">✅ Top Performing Files</span>
+
+1. <span class="ok">🟢</span> app/services/billing/refund_processor.rb
+   Score: <span class="ok">9.6 / 10</span>  Type: <span class="label">service</span>
+   Small surface area, single public method, no dependencies leak
+
+2. <span class="ok">🟢</span> app/helpers/currency_helper.rb
+   Score: <span class="ok">9.4 / 10</span>  Type: <span class="label">helper</span>
+   Pure functions, no view-state coupling</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- What it checks -->
+    <section>
+      <div class="wrap">
+        <div class="section-label">What gets checked</div>
+        <h2>Ruby fundamentals plus Rails-aware heuristics.</h2>
+        <p>
+          The gem combines language-level metrics with framework-aware checks that understand
+          how Rails apps actually break down over time.
+        </p>
+
+        <div class="checks">
+          <div>
+            <h3>Ruby metrics</h3>
+            <ul>
+              <li>Method length</li>
+              <li>Class length</li>
+              <li>Cyclomatic complexity</li>
+              <li>Nesting depth</li>
+              <li>Parameter count</li>
+              <li>ABC complexity</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Rails-specific</h3>
+            <ul>
+              <li>Controllers: action count, strong params, direct model access</li>
+              <li>Models: association count, validations, callback complexity, fat-model detection</li>
+              <li>Views: logic in templates, partials over render</li>
+              <li>Helpers: pure-function fitness</li>
+              <li>Migrations: data changes, complexity, risk surface</li>
+              <li>Services / interactors / serializers: dependency leaks, fat-service patterns</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Install / Quickstart -->
+    <section id="install">
+      <div class="wrap">
+        <div class="section-label">Quickstart</div>
+        <h2>Up and running in under a minute.</h2>
+
+        <div class="quickstart-step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <p><strong>Add the gem</strong> to your Rails app's Gemfile (or install globally):</p>
+<pre class="code"><span style="color:#9ca3af">## In Gemfile</span>
+gem 'rails_code_health', group: :development
+
+<span style="color:#9ca3af">## Or globally</span>
+$ gem install rails_code_health</pre>
+          </div>
+        </div>
+
+        <div class="quickstart-step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <p><strong>Run analysis</strong> from your project root:</p>
+<pre class="code">$ rails-health</pre>
+            <p>Or analyze a specific path, or output to JSON:</p>
+<pre class="code">$ rails-health /path/to/rails/project
+$ rails-health --format json --output report.json</pre>
+          </div>
+        </div>
+
+        <div class="quickstart-step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <p><strong>(Optional) Use it programmatically</strong> in scripts or CI:</p>
+<pre class="code">require 'rails_code_health'
+
+report = RailsCodeHealth.analyze('.')
+
+RailsCodeHealth.configure do |config|
+  config.load_thresholds_from_file('custom_config.json')
+end</pre>
+          </div>
+        </div>
+
+        <p style="margin-top: 32px;">
+          Full configuration options, threshold tuning, and CI integration examples live in the
+          <a href="https://github.com/gkosmo/rails_code_health#readme" rel="noopener">project README</a>.
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-row">
+        <div>
+          rails_code_health · MIT License · Inspired by
+          <a href="https://arxiv.org/pdf/2203.04374" rel="noopener">CodeScene research</a>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/gkosmo/rails_code_health" rel="noopener">GitHub</a>
+          <a href="https://rubygems.org/gems/rails_code_health" rel="noopener">RubyGems</a>
+          <a href="https://github.com/gkosmo/rails_code_health/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
